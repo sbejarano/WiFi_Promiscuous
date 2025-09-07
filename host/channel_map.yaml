@@ -1,0 +1,53 @@
+# ESP32 Node to Wi-Fi Channel assignment
+# Each node’s firmware should be configured to listen on its assigned channel.
+# NodeId matches the "probes:" section in config.yaml
+
+channels:
+  1:
+    channel: 1
+    frequency_mhz: 2412
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:57:74-if00"
+  2:
+    channel: 2
+    frequency_mhz: 2417
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:0C:70-if00"
+  3:
+    channel: 3
+    frequency_mhz: 2422
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:56:2C-if00"
+  4:
+    channel: 4
+    frequency_mhz: 2427
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D8:10-if00"
+  5:
+    channel: 5
+    frequency_mhz: 2432
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:12:2C-if00"
+  6:
+    channel: 6
+    frequency_mhz: 2437
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:50:9C-if00"
+  7:
+    channel: 7
+    frequency_mhz: 2442
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:4F:04-if00"
+  8:
+    channel: 8
+    frequency_mhz: 2447
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D8:08-if00"
+  9:
+    channel: 9
+    frequency_mhz: 2452
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D7:AC-if00"
+  10:
+    channel: 10
+    frequency_mhz: 2457
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:50:A8-if00"
+  11:
+    channel: 11
+    frequency_mhz: 2462
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:12:1C-if00"
+  12:
+    channel: 12
+    frequency_mhz: 2467
+    device: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:5E:54-if00"
