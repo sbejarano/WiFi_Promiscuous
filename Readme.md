@@ -35,7 +35,6 @@ wifi_promiscuous/
 ```
 
 ## System Operation (Mermaid)
-
 ```mermaid
 flowchart TB
     %% --- Probes ---
@@ -56,7 +55,7 @@ flowchart TB
 
     HUB[Powered USB Hub / Power Bar]
     HOST[Linux Host]
-    GPS[USB GPS (NMEA) + PPS]
+    GPS[USB GPS (NMEA) and PPS]
 
     P1 --> HUB
     P2 --> HUB
