@@ -1,0 +1,10 @@
+pyserial
+pynmea2
+pyyaml
+numpy
+scipy
+pyproj
+shapely
+geojson
+pandas
+tqdm
