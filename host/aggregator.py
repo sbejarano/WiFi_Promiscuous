@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
 Aggregator: multi-serial ESP32 capture + GPS NMEA fusion → SQLite/CSV,
-with optional raw NMEA logging to a side file.
+with raw NMEA logging and channel map validation.
 
-What it does:
-- Loads YAML config (host/config.yaml)
-- Opens GPS NMEA port (pynmea2) in a thread; keeps the latest fix in memory
-- Logs raw NMEA (timestamped) to gps.raw_log_path when enabled
-- Opens 12 ESP32 ports (ttyACM0..11) in threads; reads line-delimited entries
-- Accepts ESP lines as JSON or CSV:
-    JSON example:
-      {"node":3,"ch":3,"freq":2422,"bssid":"AA:BB:CC:DD:EE:FF","ssid":"Cafe","rssi":-63,"bint":102}
-    CSV example (headerless, same order):
-      node,ch,freq,bssid,ssid,rssi,bint
-      3,3,2422,AA:BB:CC:DD:EE:FF,Cafe,-63,102
-- Fuses each capture with the latest GPS fix and timestamp
-- Writes to SQLite (default) or CSV (if configured) in batches
-- Handles backpressure via an internal queue
+Additions in this version:
+- Reads optional host/channel_map.yaml:
+    channels:
+      <NodeId>:
+        channel: <1..12>
+        frequency_mhz: <int>
+        device: "/dev/serial/by-id/..."
+- Startup validation:
+    * Verifies that config.yaml 'probes:' device paths match channel_map device paths per NodeId
+    * Prints expected channel/frequency per NodeId
+- Runtime validation:
+    * For the first 50 frames per NodeId, warns if reported 'channel' from ESP32
+      disagrees with expected channel in channel_map.
 
-Dependencies (host/requirements.txt):
-  pyserial, pynmea2, pyyaml, numpy, pandas, tqdm, geojson, pyproj, shapely, scipy
+Storage (SQLite/CSV), raw GPS logging, and multi-port reading otherwise unchanged.
 """
 
 import argparse
@@ -51,7 +49,6 @@ CSV_HEADER = (
 )
 
 CHANNEL_TO_FREQ = {
-    # 2.4 GHz (802.11b/g/n)
     1: 2412, 2: 2417, 3: 2422, 4: 2427, 5: 2432, 6: 2437,
     7: 2442, 8: 2447, 9: 2452, 10: 2457, 11: 2462, 12: 2467, 13: 2472, 14: 2484
 }
@@ -83,7 +80,7 @@ def ensure_dir(p: Path) -> None:
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]  # ~/wifi_promiscuous
 
-def load_config(path: Path) -> dict:
+def load_yaml(path: Path) -> dict:
     with path.open("r") as f:
         return yaml.safe_load(f) or {}
 
@@ -118,7 +115,6 @@ class GPSReader(threading.Thread):
             path = self.raw_log_path or (repo_root() / "data" / "gps_raw.log")
             ensure_dir(path.parent)
             try:
-                # line-buffered text file
                 self._log_fh = open(path, "a", encoding="utf-8")
                 self._log("----- gps_raw log start: {} -----".format(now_iso()))
             except Exception as e:
@@ -145,8 +141,8 @@ class GPSReader(threading.Thread):
                     line, _, buf = buf.partition(b"\n")
                     sline = line.decode(errors="ignore").strip()
                     if sline:
-                        self._log_nmea(sline)       # raw NMEA log
-                        self._handle_line(sline)     # parsed fix update
+                        self._log_nmea(sline)
+                        self._handle_line(sline)
             except Exception as e:
                 print(f"[gps] Error: {e}", file=sys.stderr)
                 time.sleep(0.5)
@@ -194,7 +190,7 @@ class GPSReader(threading.Thread):
         ts = time.time()
 
         if isinstance(msg, pynmea2.types.talker.RMC):
-            if msg.status == "A":  # Active
+            if msg.status == "A":
                 lat = msg.latitude if msg.latitude else None
                 lon = msg.longitude if msg.longitude else None
                 try:
@@ -224,7 +220,6 @@ class GPSReader(threading.Thread):
             except Exception:
                 pass
 
-        # Merge with previous fix if partial
         with self._lock:
             prev = self._fix
             if prev is not None:
@@ -302,7 +297,7 @@ class ProbeReader(threading.Thread):
             pass
 
     def _parse_line(self, s: str) -> Optional[Dict[str, Any]]:
-        # Try JSON first
+        # Try JSON
         try:
             obj = json.loads(s)
             node = int(obj.get("node", self.node_id))
@@ -390,10 +385,56 @@ class CSVWriter:
             pass
 
 # ------------------------------------------------------------
+# Channel map helpers
+# ------------------------------------------------------------
+def load_channel_map(root: Path) -> Optional[dict]:
+    path = root / "host" / "channel_map.yaml"
+    if not path.exists():
+        print("[chanmap] host/channel_map.yaml not found; skipping validation.")
+        return None
+    try:
+        m = load_yaml(path)
+        if not isinstance(m, dict) or "channels" not in m:
+            print("[chanmap] invalid format; expected key 'channels'. Skipping.")
+            return None
+        return m["channels"]
+    except Exception as e:
+        print(f"[chanmap] failed to load: {e}. Skipping.")
+        return None
+
+def startup_validate_channel_map(channels_map: dict, probes_cfg: dict):
+    # Normalize keys to int
+    problems = False
+    for node_str, dev in probes_cfg.items():
+        try:
+            node = int(node_str)
+        except Exception:
+            print(f"[chanmap] non-integer NodeId in probes: {node_str}")
+            problems = True
+            continue
+        if node not in channels_map:
+            print(f"[chanmap] Node {node}: missing in channel_map.yaml")
+            problems = True
+            continue
+        info = channels_map[node]
+        exp_dev = info.get("device")
+        exp_ch = info.get("channel")
+        exp_freq = info.get("frequency_mhz")
+        print(f"[chanmap] Node {node}: device={dev}")
+        print(f"          expected: channel={exp_ch}, freq={exp_freq}, device={exp_dev}")
+        if isinstance(exp_dev, str) and exp_dev and dev != exp_dev:
+            print(f"[chanmap][warn] Node {node}: device mismatch between config.yaml and channel_map.yaml")
+            problems = True
+    if problems:
+        print("[chanmap] validation finished with warnings. Review the messages above.")
+    else:
+        print("[chanmap] validation passed.")
+
+# ------------------------------------------------------------
 # Main
 # ------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Wi-Fi Aggregator with GPS raw logging")
+    parser = argparse.ArgumentParser(description="Wi-Fi Aggregator with GPS logging and channel map validation")
     parser.add_argument("--config", required=True, help="Path to host/config.yaml")
     args = parser.parse_args()
 
@@ -401,12 +442,17 @@ def main():
     cfg_path = Path(args.config)
     if not cfg_path.is_absolute():
         cfg_path = root / cfg_path
-    cfg = load_config(cfg_path)
+    cfg = load_yaml(cfg_path)
 
     gps_cfg = cfg.get("gps", {})
     probes_cfg = cfg.get("probes", {})
     storage_cfg = cfg.get("storage", {})
     runtime_cfg = cfg.get("runtime", {})
+
+    # Load channel map (optional)
+    channels_map = load_channel_map(root)
+    if channels_map:
+        startup_validate_channel_map(channels_map, probes_cfg)
 
     # Storage setup
     mode = storage_cfg.get("mode", "sqlite").lower()
@@ -457,6 +503,9 @@ def main():
         t.start()
         probe_threads.append(t)
 
+    # Runtime channel checking state
+    runtime_checks_remaining: Dict[int, int] = {int(n): 50 for n in probes_cfg.keys()}  # first 50 frames per node
+
     batch = []
     batch_size = 200
     status_interval = int(runtime_cfg.get("status_interval_s", 5))
@@ -477,13 +526,23 @@ def main():
                 rec = None
 
             if rec:
+                node = int(rec.get("node_id", 0))
+                ch = int(rec.get("channel", 0))
+
+                # Runtime channel validation (first N frames per node)
+                if channels_map and node in channels_map and runtime_checks_remaining.get(node, 0) > 0:
+                    expected_ch = int(channels_map[node].get("channel", 0))
+                    if expected_ch and ch and ch != expected_ch:
+                        print(f"[chanmap][warn] Node {node}: reported channel {ch} != expected {expected_ch}")
+                    runtime_checks_remaining[node] -= 1
+
                 fix = gps_reader.latest_fix()
                 ts = now_iso()
                 row = (
                     ts,
-                    int(rec.get("node_id", 0)),
-                    int(rec.get("channel", 0)),
-                    int(rec.get("frequency_mhz", 0)),
+                    node,
+                    ch,
+                    int(rec.get("frequency_mhz", 0)) or freq_from_channel(ch),
                     str(rec.get("bssid", "")),
                     str(rec.get("ssid", "")),
                     int(rec.get("rssi_dbm", 0)),
@@ -534,3 +593,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
