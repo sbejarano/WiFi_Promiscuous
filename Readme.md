@@ -39,7 +39,7 @@ wifi_promiscuous/
 ```mermaid
 flowchart TB
     %% --- Probes ---
-    subgraph ESP32_Probes[12× ESP32 Probes (Channels 1–12)]
+    subgraph ESP32_Probes["12x ESP32 Probes (Channels 1-12)"]
         P1["Node 1<br/>Ch 1"]
         P2["Node 2<br/>Ch 2"]
         P3["Node 3<br/>Ch 3"]
@@ -77,7 +77,7 @@ flowchart TB
     subgraph Aggregator["host/aggregator.py"]
         S1["Serial Readers<br/>(12 ESP32 + GPS NMEA)"]
         S2["GPS Fix Buffer<br/>(lat/lon/alt/speed/track, PPS flag)"]
-        S3["Fusion<br/>Attach GPS + UTC to each Wi‑Fi capture"]
+        S3["Fusion<br/>Attach GPS + UTC to each Wi-Fi capture"]
         S4["Backpressure Queue"]
         S5["Storage Writer<br/>SQLite or CSV"]
         S6["Raw NMEA Log (optional)<br/>(data/gps_raw.log)"]
