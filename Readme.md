@@ -41,26 +41,32 @@ Linux Host:
 
 ## Repository Layout
 
-.
-├─ firmware/
-│  └─ esp32_xiao_probe/           
-├─ host/
-│  ├─ aggregator.py                
-│  ├─ trilaterate_to_geojson.py    
-│  ├─ schemas/
-│  │  ├─ sqlite_schema.sql         
-│  │  └─ csv_headers.txt           
-│  ├─ config.yaml                  
-│  └─ requirements.txt             
-├─ scripts/
-│  ├─ start.sh                     
-│  └─ udev/99-esp32-xiao.rules     
-├─ data/
-│  ├─ captures.sqlite              
-│  ├─ captures_YYYYMMDD.csv        
-│  └─ output.geojson               
-└─ README.md
+```mermaid
+flowchart TD
+    A["Project Root"]
+    A --> B["firmware/"]
+    B --> B1["esp32_xiao_probe/"]
 
+    A --> C["host/"]
+    C --> C1["aggregator.py"]
+    C --> C2["trilaterate_to_geojson.py"]
+    C --> C3["schemas/"]
+    C3 --> C3a["sqlite_schema.sql"]
+    C3 --> C3b["csv_headers.txt"]
+    C --> C4["config.yaml"]
+    C --> C5["requirements.txt"]
+
+    A --> D["scripts/"]
+    D --> D1["start.sh"]
+    D --> D2["udev/99-esp32-xiao.rules"]
+
+    A --> E["data/"]
+    E --> E1["captures.sqlite"]
+    E --> E2["captures_YYYYMMDD.csv"]
+    E --> E3["output.geojson"]
+
+    A --> F["README.md"]
+```
 ---
 
 ## Hardware
@@ -74,7 +80,7 @@ Linux Host:
 
 ---
 
-## 📡 Probe Data Model
+## Probe Data Model
 
 Wi-Fi fields:
 - `node_id` (1–12)
