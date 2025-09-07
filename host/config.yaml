@@ -1,9 +1,10 @@
 gps:
-  # Change to match your GPS device (often /dev/ttyUSB0 or /dev/ttyACM12)
   nmea_port: "/dev/ttyACM12"
   nmea_baud: 9600
   use_pps: true
   max_fix_age_ms: 500
+  raw_log_enable: true
+  raw_log_path: "data/gps_raw.log"
 
 probes:
   1: "/dev/ttyACM0"
