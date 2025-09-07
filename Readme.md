@@ -38,24 +38,25 @@ wifi_promiscuous/
 
 ```mermaid
 flowchart TB
+    %% --- Probes ---
     subgraph ESP32_Probes[12× ESP32 Probes (Channels 1–12)]
-        P1[Node 1\nCh 1]:::probe
-        P2[Node 2\nCh 2]:::probe
-        P3[Node 3\nCh 3]:::probe
-        P4[Node 4\nCh 4]:::probe
-        P5[Node 5\nCh 5]:::probe
-        P6[Node 6\nCh 6]:::probe
-        P7[Node 7\nCh 7]:::probe
-        P8[Node 8\nCh 8]:::probe
-        P9[Node 9\nCh 9]:::probe
-        P10[Node 10\nCh 10]:::probe
-        P11[Node 11\nCh 11]:::probe
-        P12[Node 12\nCh 12]:::probe
+        P1["Node 1<br/>Ch 1"]
+        P2["Node 2<br/>Ch 2"]
+        P3["Node 3<br/>Ch 3"]
+        P4["Node 4<br/>Ch 4"]
+        P5["Node 5<br/>Ch 5"]
+        P6["Node 6<br/>Ch 6"]
+        P7["Node 7<br/>Ch 7"]
+        P8["Node 8<br/>Ch 8"]
+        P9["Node 9<br/>Ch 9"]
+        P10["Node 10<br/>Ch 10"]
+        P11["Node 11<br/>Ch 11"]
+        P12["Node 12<br/>Ch 12"]
     end
 
-    HUB[Powered USB Hub / Power Bar]:::hub
-    HOST[Linux Host]:::host
-    GPS[USB GPS (NMEA) + PPS]:::gps
+    HUB[Powered USB Hub / Power Bar]
+    HOST[Linux Host]
+    GPS[USB GPS (NMEA) + PPS]
 
     P1 --> HUB
     P2 --> HUB
@@ -69,46 +70,38 @@ flowchart TB
     P10 --> HUB
     P11 --> HUB
     P12 --> HUB
-    GPS --> HOST
     HUB --> HOST
+    GPS --> HOST
 
+    %% --- Aggregator internals ---
     subgraph Aggregator["host/aggregator.py"]
-        S1[Serial Readers\n(12 ESP32 + GPS NMEA)]
-        S2[GPS Fix Buffer\n(lat/lon/alt/speed/track, PPS flag)]
-        S3[Fusion\nAttach GPS + UTC to each Wi-Fi capture]
-        S4[Backpressure Queue]
-        S5[Storage Writer\nSQLite or CSV]
-        S6[Optional: Raw NMEA Log\n(data/gps_raw.log)]
-        S7[Channel Map Validation\n(host/channel_map.yaml)]
+        S1["Serial Readers<br/>(12 ESP32 + GPS NMEA)"]
+        S2["GPS Fix Buffer<br/>(lat/lon/alt/speed/track, PPS flag)"]
+        S3["Fusion<br/>Attach GPS + UTC to each Wi‑Fi capture"]
+        S4["Backpressure Queue"]
+        S5["Storage Writer<br/>SQLite or CSV"]
+        S6["Raw NMEA Log (optional)<br/>(data/gps_raw.log)"]
+        S7["Channel Map Validation<br/>(host/channel_map.yaml)"]
     end
 
     HOST --> S1
-    GPS -. PPS discipline .-> S2
     S1 --> S2
     S2 --> S3
     S3 --> S4
     S4 --> S5
-    S1 --> S7
     S2 --> S6
+    S1 --> S7
 
-    DB[(data/captures.sqlite)]:::db
-    CSV[(data/captures_YYYYMMDD.csv)]:::db
-    GEO[GeoJSON Output]:::geo
-    T[Trilateration Script\nhost/trilaterate_to_geojson.py]:::proc
+    DB[(data/captures.sqlite)]
+    CSV[(data/captures_YYYYMMDD.csv)]
+    T[Trilateration Script<br/>host/trilaterate_to_geojson.py]
+    GEO[GeoJSON Output]
 
     S5 --> DB
     S5 --> CSV
     DB --> T
     CSV --> T
     T --> GEO
-
-    classDef probe fill:#EFF,stroke:#369,stroke-width:1px;
-    classDef hub fill:#EEE,stroke:#555,stroke-width:1px;
-    classDef host fill:#F9F9F9,stroke:#333,stroke-width:1px;
-    classDef gps fill:#FFE,stroke:#996,stroke-width:1px;
-    classDef db fill:#EFE,stroke:#393,stroke-width:1px;
-    classDef proc fill:#F6F6F6,stroke:#333,stroke-width:1px;
-    classDef geo fill:#EEF,stroke:#336,stroke-width:1px;
 ```
 
 ## Hardware
@@ -255,8 +248,3 @@ ts_utc,node_id,channel,frequency_mhz,bssid,ssid,rssi_dbm,beacon_interval_ms,gps_
 
 - Use only lawful capture methods; stick to management frames for RF mapping.
 - Keep the hub powered and use short, quality cables to minimize serial errors.
----
-
-## License
-
-MIT or Apache-2.0 (choose and place LICENSE file).
