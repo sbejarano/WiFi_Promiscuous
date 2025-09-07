@@ -1,6 +1,6 @@
 gps:
   # Change to match your GPS device (often /dev/ttyUSB0 or /dev/ttyACM12)
-  nmea_port: "/dev/ttyUSB0"
+  nmea_port: "/dev/ttyACM12"
   nmea_baud: 9600
   use_pps: true
   max_fix_age_ms: 500
