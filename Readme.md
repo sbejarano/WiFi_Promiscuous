@@ -143,7 +143,7 @@ probes:
   ...
   12: "/dev/ttyACM11"
 
-Set `gps.nmea_port` to your GPS device (`/dev/ttyUSB0` or `/dev/ttyACM12`).
+Set `gps.nmea_port` to your GPS device (`/dev/ttyUSB0`).
 
 ---
 
