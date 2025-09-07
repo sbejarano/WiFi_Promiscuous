@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Aggregator: multi-serial ESP32 capture + GPS NMEA fusion → SQLite/CSV.
+Aggregator: multi-serial ESP32 capture + GPS NMEA fusion → SQLite/CSV,
+with optional raw NMEA logging to a side file.
 
 What it does:
 - Loads YAML config (host/config.yaml)
 - Opens GPS NMEA port (pynmea2) in a thread; keeps the latest fix in memory
+- Logs raw NMEA (timestamped) to gps.raw_log_path when enabled
 - Opens 12 ESP32 ports (ttyACM0..11) in threads; reads line-delimited entries
 - Accepts ESP lines as JSON or CSV:
     JSON example:
@@ -16,14 +18,8 @@ What it does:
 - Writes to SQLite (default) or CSV (if configured) in batches
 - Handles backpressure via an internal queue
 
-Notes:
-- PPS lock status is not read directly here; set gps.use_pps in config to inform pps_locked flag.
-- If your ESP firmware does not send "freq", we compute it from channel.
-- For CSV storage, the header is created if file doesn't exist.
-
-Dependencies (see host/requirements.txt):
+Dependencies (host/requirements.txt):
   pyserial, pynmea2, pyyaml, numpy, pandas, tqdm, geojson, pyproj, shapely, scipy
-
 """
 
 import argparse
@@ -98,23 +94,41 @@ def freq_from_channel(ch: int) -> int:
     return CHANNEL_TO_FREQ.get(ch, 2412 + 5 * (ch - 1))
 
 # ------------------------------------------------------------
-# GPS reader thread
+# GPS reader thread (with raw NMEA logging)
 # ------------------------------------------------------------
 class GPSReader(threading.Thread):
-    def __init__(self, port: str, baud: int, use_pps: bool, max_fix_age_ms: int):
+    def __init__(self, port: str, baud: int, use_pps: bool, max_fix_age_ms: int,
+                 raw_log_enable: bool = True, raw_log_path: Optional[Path] = None):
         super().__init__(daemon=True)
         self.port = port
         self.baud = baud
         self.use_pps = use_pps
         self.max_fix_age_ms = max_fix_age_ms
+        self.raw_log_enable = raw_log_enable
+        self.raw_log_path = raw_log_path
         self._stop = threading.Event()
         self._ser = None
         self._lock = threading.Lock()
         self._fix: Optional[GPSFix] = None
+        self._log_fh = None
 
     def run(self):
+        # Open raw log if requested
+        if self.raw_log_enable:
+            path = self.raw_log_path or (repo_root() / "data" / "gps_raw.log")
+            ensure_dir(path.parent)
+            try:
+                # line-buffered text file
+                self._log_fh = open(path, "a", encoding="utf-8")
+                self._log("----- gps_raw log start: {} -----".format(now_iso()))
+            except Exception as e:
+                print(f"[gps] raw log open failed: {e}", file=sys.stderr)
+                self._log_fh = None
+
+        # Open serial
         try:
             self._ser = open_serial(self.port, self.baud, timeout=1.0)
+            self._log(f"[gps] opened {self.port} @ {self.baud}")
         except Exception as e:
             print(f"[gps] Failed to open {self.port}: {e}", file=sys.stderr)
             return
@@ -129,13 +143,42 @@ class GPSReader(threading.Thread):
                 # process by lines
                 while b"\n" in buf:
                     line, _, buf = buf.partition(b"\n")
-                    self._handle_line(line.decode(errors="ignore").strip())
+                    sline = line.decode(errors="ignore").strip()
+                    if sline:
+                        self._log_nmea(sline)       # raw NMEA log
+                        self._handle_line(sline)     # parsed fix update
             except Exception as e:
                 print(f"[gps] Error: {e}", file=sys.stderr)
                 time.sleep(0.5)
 
+        # Close
         try:
-            self._ser.close()
+            if self._ser:
+                self._ser.close()
+        except Exception:
+            pass
+        try:
+            if self._log_fh:
+                self._log("----- gps_raw log end: {} -----".format(now_iso()))
+                self._log_fh.close()
+        except Exception:
+            pass
+
+    def _log(self, msg: str):
+        if not self._log_fh:
+            return
+        try:
+            self._log_fh.write(f"{now_iso()} | {msg}\n")
+            self._log_fh.flush()
+        except Exception:
+            pass
+
+    def _log_nmea(self, sentence: str):
+        if not self._log_fh:
+            return
+        try:
+            self._log_fh.write(f"{now_iso()} | NMEA | {sentence}\n")
+            self._log_fh.flush()
         except Exception:
             pass
 
@@ -147,19 +190,16 @@ class GPSReader(threading.Thread):
         except Exception:
             return
 
-        # We’ll gather fields from common sentences (RMC, GGA, GSA)
         lat = lon = alt = spd = trk = hdop = vdop = None
         ts = time.time()
 
         if isinstance(msg, pynmea2.types.talker.RMC):
-            # Recommended Minimum data
-            if msg.status == "A":
+            if msg.status == "A":  # Active
                 lat = msg.latitude if msg.latitude else None
                 lon = msg.longitude if msg.longitude else None
-                # speed in knots → m/s
                 try:
                     if msg.spd_over_grnd is not None:
-                        spd = float(msg.spd_over_grnd) * 0.514444
+                        spd = float(msg.spd_over_grnd) * 0.514444  # knots → m/s
                 except Exception:
                     pass
                 try:
@@ -169,7 +209,6 @@ class GPSReader(threading.Thread):
                     pass
 
         elif isinstance(msg, pynmea2.types.talker.GGA):
-            # Fix data
             try:
                 lat = msg.latitude if msg.latitude else None
                 lon = msg.longitude if msg.longitude else None
@@ -179,7 +218,6 @@ class GPSReader(threading.Thread):
                 pass
 
         elif isinstance(msg, pynmea2.types.talker.GSA):
-            # DOP values
             try:
                 hdop = float(msg.hdop) if msg.hdop not in ("", None) else None
                 vdop = float(msg.vdop) if msg.vdop not in ("", None) else None
@@ -210,7 +248,6 @@ class GPSReader(threading.Thread):
             fix = self._fix
         if not fix:
             return None
-        # Age filter
         if (time.time() - fix.ts_utc) * 1000.0 > self.max_fix_age_ms:
             return None
         return fix
@@ -254,7 +291,6 @@ class ProbeReader(threading.Thread):
                         if rec:
                             self._q.put(rec, block=False)
             except queue.Full:
-                # Drop to avoid backpressure explosion
                 pass
             except Exception as e:
                 print(f"[probe {self.node_id}] read error: {e}", file=sys.stderr)
@@ -269,7 +305,6 @@ class ProbeReader(threading.Thread):
         # Try JSON first
         try:
             obj = json.loads(s)
-            # Normalize keys
             node = int(obj.get("node", self.node_id))
             ch = int(obj.get("ch") or obj.get("channel") or 0)
             freq = int(obj.get("freq") or obj.get("frequency_mhz") or 0) or freq_from_channel(ch)
@@ -340,15 +375,12 @@ class CSVWriter:
         ensure_dir(csv_path.parent)
         self.file = open(csv_path, "a", encoding="utf-8", newline="")
         self.writer = csvmod.writer(self.file)
-        # Write header if empty
         if self.file.tell() == 0:
             self.file.write(CSV_HEADER)
 
     def write_batch(self, rows):
-        # Convert tuples to list (without header; header already written)
         for r in rows:
             self.writer.writerow(r)
-
         self.file.flush()
 
     def close(self):
@@ -361,7 +393,7 @@ class CSVWriter:
 # Main
 # ------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Wi-Fi Aggregator")
+    parser = argparse.ArgumentParser(description="Wi-Fi Aggregator with GPS raw logging")
     parser.add_argument("--config", required=True, help="Path to host/config.yaml")
     args = parser.parse_args()
 
@@ -382,10 +414,8 @@ def main():
         sqlite_path = storage_cfg.get("sqlite_path", "data/captures.sqlite")
         sqlite_path = root / sqlite_path if not os.path.isabs(sqlite_path) else Path(sqlite_path)
         ensure_dir(sqlite_path.parent)
-        # Ensure schema
         schema_path = root / "host" / "schemas" / "sqlite_schema.sql"
         if not sqlite_path.exists():
-            import sqlite3
             conn = sqlite3.connect(str(sqlite_path))
             with schema_path.open("r") as f:
                 conn.executescript(f.read())
@@ -404,12 +434,19 @@ def main():
     # Queue for probe records
     q = queue.Queue(maxsize=int(runtime_cfg.get("queue_max", 10000)))
 
+    # GPS raw logging options
+    raw_log_enable = bool(gps_cfg.get("raw_log_enable", True))
+    raw_log_path_cfg = gps_cfg.get("raw_log_path", "data/gps_raw.log")
+    raw_log_path = (root / raw_log_path_cfg) if not os.path.isabs(raw_log_path_cfg) else Path(raw_log_path_cfg)
+
     # Start GPS thread
     gps_reader = GPSReader(
         port=gps_cfg.get("nmea_port", "/dev/ttyUSB0"),
         baud=int(gps_cfg.get("nmea_baud", 9600)),
         use_pps=bool(gps_cfg.get("use_pps", True)),
-        max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 500))
+        max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 500)),
+        raw_log_enable=raw_log_enable,
+        raw_log_path=raw_log_path
     )
     gps_reader.start()
 
@@ -427,11 +464,9 @@ def main():
 
     # Graceful shutdown
     stopping = threading.Event()
-
-    def handle_sigint(sig, frame):
-        stopping.set()
-    signal.signal(signal.SIGINT, handle_sigint)
-    signal.signal(signal.SIGTERM, handle_sigint)
+    def handle_sig(sig, frame): stopping.set()
+    signal.signal(signal.SIGINT, handle_sig)
+    signal.signal(signal.SIGTERM, handle_sig)
 
     print("[run] Aggregator running. Ctrl+C to stop.")
     try:
@@ -441,7 +476,6 @@ def main():
             except queue.Empty:
                 rec = None
 
-            # Build output row(s)
             if rec:
                 fix = gps_reader.latest_fix()
                 ts = now_iso()
@@ -465,7 +499,6 @@ def main():
                 )
                 batch.append(row)
 
-            # Flush batch
             if len(batch) >= batch_size or (rec is None and batch):
                 try:
                     writer.write_batch(batch)
@@ -473,22 +506,18 @@ def main():
                     print(f"[write] error: {e}", file=sys.stderr)
                 batch.clear()
 
-            # Periodic status
             if time.time() - last_status >= status_interval:
                 last_status = time.time()
-                qsize = q.qsize()
-                print(f"[status] q={qsize} gps={'ok' if gps_reader.latest_fix() else 'stale'}")
+                gps_ok = "ok" if gps_reader.latest_fix() else "stale"
+                print(f"[status] q={q.qsize()} gps={gps_ok}")
 
     finally:
         print("\n[shutdown] stopping threads…")
-        for t in probe_threads:
-            t.stop()
+        for t in probe_threads: t.stop()
         gps_reader.stop()
-        for t in probe_threads:
-            t.join(timeout=1.0)
+        for t in probe_threads: t.join(timeout=1.0)
         gps_reader.join(timeout=1.0)
 
-        # Flush any remaining
         if batch:
             try:
                 writer.write_batch(batch)
