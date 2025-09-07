@@ -1,5 +1,5 @@
 gps:
-  nmea_port: "/dev/ttyACM12"
+  nmea_port: "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_7_-_GPS_GNSS_Receiver-if00"
   nmea_baud: 9600
   use_pps: true
   max_fix_age_ms: 500
@@ -7,18 +7,18 @@ gps:
   raw_log_path: "data/gps_raw.log"
 
 probes:
-  1: "/dev/ttyACM0"
-  2: "/dev/ttyACM1"
-  3: "/dev/ttyACM2"
-  4: "/dev/ttyACM3"
-  5: "/dev/ttyACM4"
-  6: "/dev/ttyACM5"
-  7: "/dev/ttyACM6"
-  8: "/dev/ttyACM7"
-  9: "/dev/ttyACM8"
-  10: "/dev/ttyACM9"
-  11: "/dev/ttyACM10"
-  12: "/dev/ttyACM11"
+  1: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:57:74-if00"
+  2: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:0C:70-if00"
+  3: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:56:2C-if00"
+  4: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D8:10-if00"
+  5: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:12:2C-if00"
+  6: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:50:9C-if00"
+  7: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:4F:04-if00"
+  8: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D8:08-if00"
+  9: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:F6:D7:AC-if00"
+  10: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:50:A8-if00"
+  11: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FA:12:1C-if00"
+  12: "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B8:F8:62:FB:5E:54-if00"
 
 storage:
   mode: "sqlite"                # Options: sqlite | csv
