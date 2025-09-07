@@ -1,0 +1,30 @@
+gps:
+  # Change to match your GPS device (often /dev/ttyUSB0 or /dev/ttyACM12)
+  nmea_port: "/dev/ttyUSB0"
+  nmea_baud: 9600
+  use_pps: true
+  max_fix_age_ms: 500
+
+probes:
+  1: "/dev/ttyACM0"
+  2: "/dev/ttyACM1"
+  3: "/dev/ttyACM2"
+  4: "/dev/ttyACM3"
+  5: "/dev/ttyACM4"
+  6: "/dev/ttyACM5"
+  7: "/dev/ttyACM6"
+  8: "/dev/ttyACM7"
+  9: "/dev/ttyACM8"
+  10: "/dev/ttyACM9"
+  11: "/dev/ttyACM10"
+  12: "/dev/ttyACM11"
+
+storage:
+  mode: "sqlite"                # Options: sqlite | csv
+  sqlite_path: "data/captures.sqlite"
+  csv_path: "data/captures_{{date}}.csv"
+
+runtime:
+  status_interval_s: 5
+  queue_max: 10000
+  drop_on_backpressure: true
