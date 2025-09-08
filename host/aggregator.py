@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Wi-Fi Multi-Probe Aggregator (12x ESP32 XIAO + GPS/PPS)
+Wi-Fi Multi-Probe Aggregator (ESP32 XIAO ×12 + GPS/PPS)
 
 Features
-- Probes: read JSON/CSV lines from 12 ESP32 devices (USB serial), robust to field variations.
-- GPS: choose "gpsd" (recommended, no serial contention) or "serial" NMEA source.
-- Fusion: attach UTC/GPS (lat/lon/alt/speed/track/hdop/vdop/PPS) to each Wi-Fi capture.
-- Storage: SQLite (default) or CSV. SQLite uses WAL for throughput.
-- Validation: optional host/channel_map.yaml checked on startup and at runtime (first N frames).
-- Clean shutdown: no 'Event object is not callable' errors.
-
-Table columns (16):
-  ts_utc, node_id, channel, frequency_mhz, bssid, ssid, rssi_dbm, beacon_interval_ms,
-  gps_lat, gps_lon, gps_alt_m, gps_speed_mps, gps_track_deg, gps_hdop, gps_vdop, pps_locked
+- Robust serial parsing from ESP32 probes:
+  * Balanced-brace JSON extraction (works even if lines break mid-object)
+  * Newline-delimited JSON fallback
+  * Minimal CSV fallback (node,ch,freq,bssid,ssid,rssi,bint)
+- GPS from gpsd (default) or serial NMEA with freshness window
+- STRICT 0/0 GUARD: never writes 0,0 coordinates to storage (coerces to NULL)
+- SQLite/CSV writers (16 columns incl. gps_hdop/gps_vdop)
+- Optional channel map validation and runtime checks
 """
 
 import argparse
@@ -29,15 +27,13 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import serial
 import pynmea2
 import yaml
 
-# ------------------------------------------------------------
-# Constants and helpers
-# ------------------------------------------------------------
+# --------------------- Helpers & Constants ---------------------
 
 CSV_HEADER = (
     "ts_utc,node_id,channel,frequency_mhz,bssid,ssid,rssi_dbm,beacon_interval_ms,"
@@ -49,6 +45,8 @@ CHANNEL_TO_FREQ = {
     7: 2442, 8: 2447, 9: 2452, 10: 2457, 11: 2462, 12: 2467, 13: 2472, 14: 2484
 }
 
+ZERO_EPS = 1e-9  # near-zero threshold used to block 0/0 coords
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -56,7 +54,6 @@ def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 def repo_root() -> Path:
-    # file is at host/aggregator.py -> parents[1] = repo root
     return Path(__file__).resolve().parents[1]
 
 def load_yaml(path: Path) -> dict:
@@ -77,9 +74,20 @@ def open_serial(port: str, baud: int, timeout: float) -> Optional[serial.Serial]
         print(f"[serial] Failed to open {port}: {e}", file=sys.stderr)
         return None
 
-# ------------------------------------------------------------
-# Data classes
-# ------------------------------------------------------------
+def null_if_zero(lat: Optional[float], lon: Optional[float]) -> (Optional[float], Optional[float]):
+    """
+    Enforce the NEVER-0/0 rule. If either coordinate is exactly zero or near-zero,
+    return (None, None). Otherwise pass through.
+    """
+    if lat is None or lon is None:
+        return (None, None) if (lat in (0, 0.0) or lon in (0, 0.0)) else (lat, lon)
+    if abs(lat) < ZERO_EPS or abs(lon) < ZERO_EPS:
+        return (None, None)
+    if (lat == 0.0) or (lon == 0.0):
+        return (None, None)
+    return (lat, lon)
+
+# --------------------------- Data -----------------------------
 
 @dataclass
 class GPSFix:
@@ -93,14 +101,12 @@ class GPSFix:
     vdop: Optional[float]
     pps_locked: bool
 
-# ------------------------------------------------------------
-# GPS via gpsd (JSON over TCP)
-# ------------------------------------------------------------
+# -------------------------- GPSD ------------------------------
 
 class GPSDReader(threading.Thread):
     """
-    Connects to gpsd (127.0.0.1:2947), sends WATCH, parses TPV/SKY JSON objects.
-    Never touches /dev/tty*, so no contention with gpsd.
+    Read TPV/SKY JSON from gpsd. We accept mode>=2 for lat/lon and mode==3 for alt.
+    0/0 is sanitized upstream (null_if_zero) before write.
     """
     def __init__(self, host: str, port: int, use_pps: bool, max_fix_age_ms: int,
                  raw_log_enable: bool = True, raw_log_path: Optional[Path] = None):
@@ -154,14 +160,20 @@ class GPSDReader(threading.Thread):
     def _parse_obj(self, obj: dict):
         ts = time.time()
         lat = lon = alt = spd = trk = hdop = vdop = None
-
         cls = obj.get("class")
+
         if cls == "TPV":
-            lat = obj.get("lat")
-            lon = obj.get("lon")
-            alt = obj.get("altMSL") or obj.get("alt")
+            mode = int(obj.get("mode", 0) or 0)
+            if mode >= 2:
+                lat = obj.get("lat")
+                lon = obj.get("lon")
+                if (lat in (0, 0.0)) or (lon in (0, 0.0)):
+                    lat = lon = None
+            if mode == 3:
+                alt = obj.get("altMSL") or obj.get("alt")
             spd = obj.get("speed")
             trk = obj.get("track") or obj.get("course")
+
         elif cls == "SKY":
             hdop = obj.get("hdop")
             vdop = obj.get("vdop")
@@ -178,13 +190,7 @@ class GPSDReader(threading.Thread):
                 trk = trk if trk is not None else prev.track_deg
                 hdop = hdop if hdop is not None else prev.hdop
                 vdop = vdop if vdop is not None else prev.vdop
-            self._fix = GPSFix(
-                ts_utc=ts,
-                lat=lat, lon=lon, alt_m=alt,
-                speed_mps=spd, track_deg=trk,
-                hdop=hdop, vdop=vdop,
-                pps_locked=bool(self.use_pps)
-            )
+            self._fix = GPSFix(ts, lat, lon, alt, spd, trk, hdop, vdop, bool(self.use_pps))
 
     def run(self):
         self._open_log()
@@ -228,8 +234,7 @@ class GPSDReader(threading.Thread):
             pass
         try:
             if self._log_fh:
-                self._log(f"gpsd_raw end {now_iso()}")
-                self._log_fh.close()
+                self._log(f"gpsd_raw end {now_iso()}"); self._log_fh.close()
         except Exception:
             pass
 
@@ -245,9 +250,7 @@ class GPSDReader(threading.Thread):
     def stop(self):
         self._stop_evt.set()
 
-# ------------------------------------------------------------
-# GPS via serial NMEA (fallback option)
-# ------------------------------------------------------------
+# ------------------------- Serial NMEA -------------------------
 
 class GPSReader(threading.Thread):
     def __init__(self, port: str, baud: int, use_pps: bool, max_fix_age_ms: int,
@@ -308,27 +311,29 @@ class GPSReader(threading.Thread):
             pass
         try:
             if self._log_fh:
-                self._log(f"gps_raw end {now_iso()}")
-                self._log_fh.close()
+                self._log(f"gps_raw end {now_iso()}"); self._log_fh.close()
         except Exception:
             pass
 
     def _log(self, msg: str):
-        if not self._log_fh: return
+        if not self._log_fh:
+            return
         try:
             self._log_fh.write(f"{now_iso()} | {msg}\n"); self._log_fh.flush()
         except Exception:
             pass
 
     def _log_nmea(self, sentence: str):
-        if not self._log_fh: return
+        if not self._log_fh:
+            return
         try:
             self._log_fh.write(f"{now_iso()} | NMEA | {sentence}\n"); self._log_fh.flush()
         except Exception:
             pass
 
     def _handle_line(self, line: str):
-        if not line.startswith("$"): return
+        if not line.startswith("$"):
+            return
         try:
             msg = pynmea2.parse(line, check=True)
         except Exception:
@@ -339,11 +344,13 @@ class GPSReader(threading.Thread):
 
         if isinstance(msg, pynmea2.types.talker.RMC):
             if msg.status == "A":
-                lat = msg.latitude if msg.latitude else None
-                lon = msg.longitude if msg.longitude else None
+                lat = msg.latitude or None
+                lon = msg.longitude or None
+                if (lat in (0, 0.0)) or (lon in (0, 0.0)):
+                    lat = lon = None
                 try:
                     if msg.spd_over_grnd is not None:
-                        spd = float(msg.spd_over_grnd) * 0.514444  # knots → m/s
+                        spd = float(msg.spd_over_grnd) * 0.514444  # knots→m/s
                 except Exception:
                     pass
                 try:
@@ -354,8 +361,10 @@ class GPSReader(threading.Thread):
 
         elif isinstance(msg, pynmea2.types.talker.GGA):
             try:
-                lat = msg.latitude if msg.latitude else None
-                lon = msg.longitude if msg.longitude else None
+                lat = msg.latitude or None
+                lon = msg.longitude or None
+                if (lat in (0, 0.0)) or (lon in (0, 0.0)):
+                    lat = lon = None
                 alt = float(msg.altitude) if msg.altitude not in ("", None) else None
                 hdop = float(msg.horizontal_dil) if msg.horizontal_dil not in ("", None) else None
             except Exception:
@@ -378,13 +387,7 @@ class GPSReader(threading.Thread):
                 trk = trk if trk is not None else prev.track_deg
                 hdop = hdop if hdop is not None else prev.hdop
                 vdop = vdop if vdop is not None else prev.vdop
-            self._fix = GPSFix(
-                ts_utc=ts,
-                lat=lat, lon=lon, alt_m=alt,
-                speed_mps=spd, track_deg=trk,
-                hdop=hdop, vdop=vdop,
-                pps_locked=bool(self.use_pps)
-            )
+            self._fix = GPSFix(ts, lat, lon, alt, spd, trk, hdop, vdop, bool(self.use_pps))
 
     def latest_fix(self) -> Optional[GPSFix]:
         with self._lock:
@@ -398,9 +401,7 @@ class GPSReader(threading.Thread):
     def stop(self):
         self._stop_evt.set()
 
-# ------------------------------------------------------------
-# Probe reader (ESP32)
-# ------------------------------------------------------------
+# ------------------------- Probe Reader -----------------------
 
 class ProbeReader(threading.Thread):
     def __init__(self, node_id: int, port: str, out_queue: queue.Queue, baud: int = 115200):
@@ -414,7 +415,7 @@ class ProbeReader(threading.Thread):
         self._q = out_queue
 
     def run(self):
-        self._ser = open_serial(self.port, self.baud, timeout=0.1)
+        self._ser = open_serial(self.port, self.baud, timeout=0.05)
         if not self._ser:
             return
         print(f"[probe {self.node_id}] opened {self.port}")
@@ -425,19 +426,45 @@ class ProbeReader(threading.Thread):
                 if not chunk:
                     continue
                 self._buf.extend(chunk)
+
+                # Drain complete JSON objects (balanced braces)
+                for obj in self._drain_json_objects_from_buffer():
+                    rec = self._normalize_rec(obj)
+                    if rec:
+                        try:
+                            self._q.put(rec, block=False)
+                        except queue.Full:
+                            pass
+
+                # Fallback: newline-delimited JSON or recovery/CSV
                 while b"\n" in self._buf:
-                    line, _, self._buf = self._buf.partition(b"\n")
-                    s = line.decode(errors="ignore").strip()
-                    if s:
-                        rec = self._parse_line(s)
+                    line_bytes, _, self._buf = self._buf.partition(b"\n")
+                    s = line_bytes.decode(errors="ignore").strip()
+                    if not s:
+                        continue
+                    try:
+                        obj = json.loads(s)
+                        rec = self._normalize_rec(obj)
                         if rec:
-                            try:
-                                self._q.put(rec, block=False)
-                            except queue.Full:
-                                pass
+                            try: self._q.put(rec, block=False)
+                            except queue.Full: pass
+                        continue
+                    except Exception:
+                        obj = self._recover_json_from_string(s)
+                        if obj is not None:
+                            rec = self._normalize_rec(obj)
+                            if rec:
+                                try: self._q.put(rec, block=False)
+                                except queue.Full: pass
+                        else:
+                            rec = self._parse_csv_fallback(s)
+                            if rec:
+                                try: self._q.put(rec, block=False)
+                                except queue.Full: pass
+
             except Exception as e:
                 print(f"[probe {self.node_id}] read error: {e}", file=sys.stderr)
-                time.sleep(0.1)
+                time.sleep(0.05)
 
         try:
             if self._ser:
@@ -445,57 +472,120 @@ class ProbeReader(threading.Thread):
         except Exception:
             pass
 
-    def _parse_line(self, s: str) -> Optional[Dict[str, Any]]:
-        # JSON
-        try:
-            obj = json.loads(s)
-            if not isinstance(obj, dict):
-                raise ValueError("not object")
-            node = int(obj.get("node", obj.get("node_id", obj.get("id", self.node_id))))
-            ch = int(obj.get("ch", obj.get("chan", obj.get("channel", 0))))
-            freq_raw = obj.get("freq", obj.get("frequency_mhz", 0))
-            freq = int(freq_raw) if str(freq_raw).strip().isdigit() else freq_from_channel(ch)
-            bssid = str(obj.get("bssid", "")).strip()
-            ssid = obj.get("ssid", "")
-            rssi_raw = obj.get("rssi", obj.get("rssi_dbm", 0))
+    def _drain_json_objects_from_buffer(self) -> List[dict]:
+        out = []
+        data = self._buf
+        start = -1
+        depth = 0
+        i = 0
+        n = len(data)
+        while i < n:
+            c = data[i]
+            if c == ord('{'):
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif c == ord('}'):
+                if depth > 0:
+                    depth -= 1
+                    if depth == 0 and start != -1:
+                        segment = data[start:i+1]
+                        try:
+                            obj = json.loads(segment.decode(errors="ignore"))
+                            out.append(obj)
+                        except Exception:
+                            pass
+                        start = -1
+            i += 1
+
+        # retain only unmatched tail
+        if depth == 0:
+            self._buf = bytearray()
+        else:
+            self._buf = bytearray(data[start:] if start != -1 else b"")
+        return out
+
+    def _recover_json_from_string(self, s: str) -> Optional[dict]:
+        a = s.find("{"); b = s.rfind("}")
+        if a != -1 and b != -1 and b > a:
+            frag = s[a:b+1]
             try:
-                rssi = int(rssi_raw) if str(rssi_raw).strip() not in ("", None) else 0
+                return json.loads(frag)
             except Exception:
-                rssi = 0
-            bint = obj.get("bint") or obj.get("beacon_interval_ms") or None
-            bint = int(bint) if bint not in (None, "") else None
+                return None
+        return None
 
-            return dict(node_id=node, channel=ch, frequency_mhz=freq,
-                        bssid=bssid, ssid=ssid, rssi_dbm=rssi,
-                        beacon_interval_ms=bint)
+    def _normalize_rec(self, obj: dict) -> Optional[Dict[str, Any]]:
+        if not isinstance(obj, dict):
+            return None
+        node = obj.get("node") or obj.get("node_id") or obj.get("id") or self.node_id
+        try:
+            node = int(node)
         except Exception:
-            pass
+            node = self.node_id
 
-        # CSV: node,ch,freq,bssid,ssid,rssi,bint
+        ch = obj.get("ch") or obj.get("chan") or obj.get("channel") or 0
+        try:
+            ch = int(ch)
+        except Exception:
+            ch = 0
+
+        freq_raw = obj.get("freq") or obj.get("frequency_mhz") or ""
+        try:
+            freq = int(freq_raw)
+        except Exception:
+            freq = freq_from_channel(ch)
+
+        bssid = str(obj.get("bssid", "")).strip()
+        ssid = obj.get("ssid", "")
+        rssi_raw = obj.get("rssi") or obj.get("rssi_dbm") or 0
+        try:
+            rssi = int(rssi_raw)
+        except Exception:
+            rssi = 0
+        bint = obj.get("bint") or obj.get("beacon_interval_ms") or None
+        try:
+            bint = int(bint) if bint not in (None, "") else None
+        except Exception:
+            bint = None
+
+        if not bssid:
+            return None
+        return dict(
+            node_id=node,
+            channel=ch,
+            frequency_mhz=freq,
+            bssid=bssid,
+            ssid=ssid if ssid is not None else "",
+            rssi_dbm=rssi,
+            beacon_interval_ms=bint
+        )
+
+    def _parse_csv_fallback(self, s: str) -> Optional[Dict[str, Any]]:
         try:
             parts = [p.strip() for p in s.split(",")]
             if len(parts) >= 7:
                 node = int(parts[0] or self.node_id)
-                ch = int(parts[1])
+                ch = int(parts[1] or 0)
                 freq = int(parts[2]) if parts[2] else freq_from_channel(ch)
                 bssid = parts[3]
                 ssid = parts[4]
-                rssi = int(parts[5]) if parts[5] else 0
+                rssi = int(parts[5] or 0)
                 bint = int(parts[6]) if parts[6] else None
-                return dict(node_id=node, channel=ch, frequency_mhz=freq,
-                            bssid=bssid, ssid=ssid, rssi_dbm=rssi,
-                            beacon_interval_ms=bint)
+                if not bssid:
+                    return None
+                return dict(
+                    node_id=node, channel=ch, frequency_mhz=freq,
+                    bssid=bssid, ssid=ssid, rssi_dbm=rssi, beacon_interval_ms=bint
+                )
         except Exception:
             pass
-
         return None
 
     def stop(self):
         self._stop_evt.set()
 
-# ------------------------------------------------------------
-# Storage
-# ------------------------------------------------------------
+# --------------------------- Storage --------------------------
 
 class SQLiteWriter:
     def __init__(self, db_path: Path):
@@ -544,9 +634,7 @@ class CSVWriter:
         except Exception:
             pass
 
-# ------------------------------------------------------------
-# Channel map helpers
-# ------------------------------------------------------------
+# ---------------------- Channel Map helpers -------------------
 
 def load_channel_map(root: Path) -> Optional[dict]:
     path = root / "host" / "channel_map.yaml"
@@ -590,9 +678,7 @@ def startup_validate_channel_map(channels_map: dict, probes_cfg: dict):
     else:
         print("[chanmap] validation passed.")
 
-# ------------------------------------------------------------
-# Main
-# ------------------------------------------------------------
+# ----------------------------- Main ---------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Wi-Fi Aggregator with GPS (gpsd or serial), SQLite/CSV storage")
@@ -610,7 +696,6 @@ def main():
     storage_cfg = cfg.get("storage", {})
     runtime_cfg = cfg.get("runtime", {})
 
-    # Channel map (optional)
     channels_map = load_channel_map(root)
     if channels_map:
         startup_validate_channel_map(channels_map, probes_cfg)
@@ -641,21 +726,21 @@ def main():
         print(f"[error] Unknown storage mode: {mode}")
         return 2
 
-    # Queue for probe records
+    # Queue
     q = queue.Queue(maxsize=int(runtime_cfg.get("queue_max", 10000)))
 
-    # GPS reader choice
+    # GPS choice
     raw_log_enable = bool(gps_cfg.get("raw_log_enable", True))
     raw_log_path_cfg = gps_cfg.get("raw_log_path", "data/gps_raw.log")
     raw_log_path = (root / raw_log_path_cfg) if not os.path.isabs(raw_log_path_cfg) else Path(raw_log_path_cfg)
 
-    gps_source = str(gps_cfg.get("source", "serial")).lower()  # "gpsd" or "serial"
+    gps_source = str(gps_cfg.get("source", "gpsd")).lower()  # default to gpsd
     if gps_source == "gpsd":
         gps_reader = GPSDReader(
             host=str(gps_cfg.get("host", "127.0.0.1")),
             port=int(gps_cfg.get("port", 2947)),
             use_pps=bool(gps_cfg.get("use_pps", True)),
-            max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 500)),
+            max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 2000)),
             raw_log_enable=raw_log_enable,
             raw_log_path=raw_log_path
         )
@@ -664,24 +749,24 @@ def main():
             port=gps_cfg.get("nmea_port", "/dev/ttyUSB0"),
             baud=int(gps_cfg.get("nmea_baud", 9600)),
             use_pps=bool(gps_cfg.get("use_pps", True)),
-            max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 500)),
+            max_fix_age_ms=int(gps_cfg.get("max_fix_age_ms", 2000)),
             raw_log_enable=raw_log_enable,
             raw_log_path=raw_log_path
         )
     gps_reader.start()
 
-    # Probe threads
+    # Probes
     probe_threads = []
     for node_str, port in sorted(probes_cfg.items(), key=lambda kv: int(kv[0])):
         t = ProbeReader(node_id=int(node_str), port=str(port), out_queue=q)
         t.start()
         probe_threads.append(t)
 
-    # Runtime ch check (first N frames)
+    # Runtime channel checks (first N frames per node)
     run_checks_remaining: Dict[int, int] = {int(n): 50 for n in probes_cfg.keys()}
 
     batch = []
-    batch_size = 200
+    batch_size = int(runtime_cfg.get("batch_size", 200))
     status_interval = int(runtime_cfg.get("status_interval_s", 5))
     last_status = time.time()
 
@@ -703,7 +788,7 @@ def main():
                 node = int(rec.get("node_id", 0))
                 ch = int(rec.get("channel", 0))
 
-                # runtime channel validation
+                # runtime channel validation (optional)
                 if channels_map and node in channels_map and run_checks_remaining.get(node, 0) > 0:
                     expected_ch = int(channels_map[node].get("channel", 0))
                     if expected_ch and ch and ch != expected_ch:
@@ -712,6 +797,11 @@ def main():
 
                 fix = gps_reader.latest_fix()
                 ts = now_iso()
+
+                # ---- STRICT 0/0 GUARD here ----
+                lat, lon = (fix.lat, fix.lon) if fix else (None, None)
+                lat, lon = null_if_zero(lat, lon)  # force 0/0 → NULL
+
                 row = (
                     ts,
                     node,
@@ -721,8 +811,8 @@ def main():
                     str(rec.get("ssid", "")),
                     int(rec.get("rssi_dbm", 0)),
                     rec.get("beacon_interval_ms", None),
-                    (fix.lat if fix else None),
-                    (fix.lon if fix else None),
+                    lat,
+                    lon,
                     (fix.alt_m if fix else None),
                     (fix.speed_mps if fix else None),
                     (fix.track_deg if fix else None),
@@ -746,6 +836,30 @@ def main():
 
     finally:
         print("\n[shutdown] stopping threads…")
+        for t in probe_threads:
+            t.stop()
+        gps_reader.stop()
+        for t in probe_threads:
+            t.join(timeout=1.0)
+        gps_reader.join(timeout=1.0)
+
+        if batch:
+            try:
+                writer.write_batch(batch)
+            except Exception as e:
+                print(f"[write] final flush error: {e}", file=sys.stderr)
+
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+        print("[done] Aggregator stopped.")
+        return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+
         for t in probe_threads:
             t.stop()
         gps_reader.stop()
