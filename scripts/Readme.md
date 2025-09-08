@@ -59,6 +59,7 @@ Options (pass-through to trilaterate.py):
     --outfile PATH     write to specific file instead of auto-naming
 
 Examples:
+
     # Last 30 minutes, quieter output
     ./trilaterate.sh --minutes 30 --quiet
 
