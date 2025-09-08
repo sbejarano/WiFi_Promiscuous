@@ -1,6 +1,7 @@
 gps:
-  nmea_port: "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_7_-_GPS_GNSS_Receiver-if00"
-  nmea_baud: 9600
+  source: "gpsd"           # "gpsd" or "serial"
+  host: "127.0.0.1"
+  port: 2947
   use_pps: true
   max_fix_age_ms: 500
   raw_log_enable: true
