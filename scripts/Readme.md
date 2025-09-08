@@ -1,83 +1,81 @@
-# Wi-Fi Promiscuous Capture – Scripts
+# Wi-Fi Promiscuous Capture - Scripts
 
-This directory contains helper shell scripts that manage the Wi-Fi multi-probe system, monitoring, and trilateration export.
+This directory (`scripts/`) contains helper shell and Python scripts to manage,
+monitor, and process data for the Wi-Fi Promiscuous Capture project.
 
-## Available Scripts
+## Scripts Overview
 
 ### 1. start.sh
-Bootstrap and start the Wi-Fi Multi-Probe Aggregator.
+Bootstraps the entire system:
+- Activates the `.wifienv` virtual environment.
+- Installs dependencies from `host/requirements.txt`.
+- Initializes or migrates the SQLite database at `../data/captures.sqlite`.
+- Stops conflicting GPS services (gpsd).
+- Launches the main aggregator (`host/aggregator.py`) using `../host/config.yaml`.
 
-- Creates/updates the local Python virtual environment (.wifienv).
-- Installs all dependencies from host/requirements.txt.
-- Initializes the SQLite database (data/captures.sqlite) if not present.
-- Stops gpsd to free the GPS serial device.
-- Launches aggregator.py with configuration from host/config.yaml.
-- Captured data is written into the database.
-
-Run:
-    ./start.sh
-
-Stop:
-    Press Ctrl+C to terminate the aggregator.
+**Run:**
+```bash
+./start.sh
+```
 
 ---
 
 ### 2. monitor.sh
-Monitor the live ingestion rate per probe node.
+Launches the monitoring utility to track per-node capture counts in real time.
 
-- Wraps monitor_nodes.py.
-- Shows how many lines (captures) per node are being received every second.
-- Useful to verify all ESP32 probes are working.
+**Run:**
+```bash
+./monitor.sh
+```
 
-Run:
-    ./monitor.sh
-
-Press Ctrl+C to exit.
+This calls `monitor_nodes.py` which prints statistics for each ESP32 node (1–12).
 
 ---
 
 ### 3. trilaterate.sh
-Perform multilateration of observed BSSIDs and export to GeoJSON.
+Runs trilateration on captured Wi-Fi data:
+- Reads from `../data/captures.sqlite`.
+- Estimates Access Point positions based on RSSI, speed, heading, and altitude.
+- Outputs a GeoJSON file into `../geojson/` with timestamped filename.
+- Each AP is annotated with a confidence percentage.
 
-- Reads from data/captures.sqlite.
-- Groups observations by BSSID.
-- Applies weighted least-squares trilateration (RSSI → range, GPS weighting).
-- Produces a timestamped GeoJSON in geojson/.
+**Run:**
+```bash
+./trilaterate.sh
+```
 
-Run with defaults (last 60 minutes of data):
-    ./trilaterate.sh
-
-Options (pass-through to trilaterate.py):
-    --minutes N        look back N minutes (default 60)
-    --since ISO        start time, e.g. 2025-09-08T00:00:00Z
-    --bssid XX:XX:XX:XX:XX:XX  process only this BSSID (repeatable)
-    --p0 -40           RSSI at 1 m (default -40 dBm)
-    --n 2.2            path loss exponent (default 2.2)
-    --max-range 2000   clamp max range in meters
-    --conf-scale 100   confidence scaling in meters
-    --quiet            suppress progress logs
-    --outfile PATH     write to specific file instead of auto-naming
-
-Examples:
-
-    # Last 30 minutes, quieter output
-    ./trilaterate.sh --minutes 30 --quiet
-
-    # Process only a given BSSID
-    ./trilaterate.sh --minutes 120 --bssid 1C:8B:76:8F:89:DB
-
-    # Use a custom path-loss model
-    ./trilaterate.sh --p0 -42 --n 2.0
+Result: `../geojson/trilateration-YYYYMMDD-HHMMSS.geojson`
 
 ---
 
-## Output Locations
-- Database: ../data/captures.sqlite
-- GeoJSON results: ../geojson/trilateration_<UTC-TIMESTAMP>.geojson
+### 4. calibrate.sh
+Calibrates RSSI model parameters (`p0`, `n`) using anchors defined in
+`../scripts/calibration.yaml`. Anchors are APs with known locations.
+
+**Run:**
+```bash
+./calibrate.sh
+```
+
+This updates the calibration file with corrected values.
 
 ---
+
+## File Layout
+
+```
+scripts/
+├── start.sh         # Start aggregator, setup env, stop gpsd, manage DB
+├── monitor.sh       # Launch node monitor (monitor_nodes.py)
+├── trilaterate.sh   # Run trilateration, export GeoJSON
+├── calibrate.sh     # Run calibration with known anchors
+├── monitor_nodes.py # Python script for node stats
+├── trilaterate.py   # Trilateration algorithm
+├── calibrate.py     # Calibration routine
+└── calibration.yaml # Anchor definitions and calibration params
+```
 
 ## Notes
-- Always run start.sh first to ensure the environment and database exist.
-- Use monitor.sh during a session to verify all probes are contributing data.
-- Run trilaterate.sh after sufficient data has been collected to export estimated AP positions.
+- Run all scripts from inside the `scripts/` directory.
+- Ensure ESP32 devices appear under `/dev/serial/by-id/` and GPS is not occupied by `gpsd` before running.
+- GeoJSON exports can be loaded directly into GIS tools or Google Earth.sitions.
