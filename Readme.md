@@ -35,6 +35,7 @@ wifi_promiscuous/
 ```
 
 ## System Operation (Mermaid)
+
 ```mermaid
 flowchart TB
     %% --- Probes ---
@@ -55,7 +56,7 @@ flowchart TB
 
     HUB[Powered USB Hub / Power Bar]
     HOST[Linux Host]
-    GPS[USB GPS (NMEA) and PPS]
+    G["USB GNSS NMEA with PPS"]
 
     P1 --> HUB
     P2 --> HUB
@@ -70,13 +71,13 @@ flowchart TB
     P11 --> HUB
     P12 --> HUB
     HUB --> HOST
-    GPS --> HOST
+    G --> HOST
 
     %% --- Aggregator internals ---
     subgraph Aggregator["host/aggregator.py"]
-        S1["Serial Readers<br/>(12 ESP32 + GPS NMEA)"]
+        S1["Serial Readers<br/>(12 ESP32 and GPS NMEA)"]
         S2["GPS Fix Buffer<br/>(lat/lon/alt/speed/track, PPS flag)"]
-        S3["Fusion<br/>Attach GPS + UTC to each Wi-Fi capture"]
+        S3["Fusion<br/>Attach GPS and UTC to each Wi-Fi capture"]
         S4["Backpressure Queue"]
         S5["Storage Writer<br/>SQLite or CSV"]
         S6["Raw NMEA Log (optional)<br/>(data/gps_raw.log)"]
