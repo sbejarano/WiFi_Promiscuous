@@ -71,7 +71,7 @@ flowchart TB
     P11 --> HUB
     P12 --> HUB
     HUB --> HOST
-    G --> HOST
+    G --> HUB
 
     %% --- Aggregator internals ---
     subgraph Aggregator["host/aggregator.py"]
