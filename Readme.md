@@ -111,6 +111,114 @@ flowchart TB
 - GPS receiver providing NMEA (USB) and PPS.
 - Linux host (Debian/Ubuntu/Raspberry Pi OS).
 
+```mermaid
+  flowchart TD
+ subgraph s1["USB HUB WITH POWER"]
+        n40["USB MUX"]
+  end
+ subgraph s2["Raspberry Pi 5"]
+        n41["USB BUS"]
+        n42["ttyACM0"]
+        n43["ttyACM1"]
+        n44["ttyACM2"]
+        n45["ttyACM3"]
+        n46["ttyACM4"]
+        n47["ttyACM5"]
+        n48["ttyACM6"]
+        n49["ttyACM7"]
+        n50["ttyACM8"]
+        n52["ttyACM9"]
+        n53["ttyACM10"]
+        n54["ttyACM11"]
+        n55["ttyACM12"]
+  end
+    C["Node 1"] --> n1["Tune to CH1<br>802.11"]
+    n1 --> n5["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    A(["Power"]) --> C & n6["Node 2"] & n9["Node 3"] & n12["Node 4"] & n15["Node 5"] & n18["Node 6"] & n21["Node 7"] & n24["Node 8"] & n27["Node 9"] & n30["Node 10"] & n33["Node 11"] & n39["Node 12"] & n57["GPS"]
+    n6 --> n7["Tune to CH2<br>802.11"]
+    n7 --> n8["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n9 --> n10["Tune to CH3<br>802.11"]
+    n10 --> n11["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n12 --> n13["Tune to CH4<br>802.11"]
+    n13 --> n14["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n15 --> n16["Tune to CH5<br>802.11"]
+    n16 --> n17["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n18 --> n19["Tune to CH6<br>802.11"]
+    n19 --> n20["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n21 --> n22["Tune to CH7<br>802.11"]
+    n22 --> n23["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n24 --> n25["Tune to CH8<br>802.11"]
+    n25 --> n26["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n27 --> n28["Tune to CH9<br>802.11"]
+    n28 --> n29["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n30 --> n31["Tune to CH10<br>802.11"]
+    n31 --> n32["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n33 --> n34["Tune to CH11<br>802.11"]
+    n34 --> n35["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n37["Scan All Channelszzzzzzz<br>802.11 every 3 secnds"] --> n38["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n39 --> n37
+    n5 --> s1
+    n8 --> s1
+    n11 --> s1
+    n14 --> s1
+    n17 --> s1
+    n20 --> s1
+    n23 --> s1
+    n26 --> s1
+    n29 --> s1
+    n32 --> s1
+    n35 --> s1
+    n38 --> s1
+    n40 --> n41
+    n41 -- Ch1 --> n42
+    n41 -- Ch2 --> n43
+    n41 -- Ch3 --> n44
+    n41 -- Ch4 --> n45
+    n41 -- Ch5 --> n46
+    n41 -- Ch6 --> n47
+    n41 -- Ch7 --> n48
+    n41 -- Ch8 --> n49
+    n41 -- Ch9 --> n50
+    n41 -- Ch10 --> n52
+    n41 -- Ch11 --> n53
+    n41 -- Ch12 --> n54
+    n57 --> s1
+    n41 -- GPS --> n55
+    n6@{ shape: rect}
+    n9@{ shape: rect}
+    n12@{ shape: rect}
+    n15@{ shape: rect}
+    n18@{ shape: rect}
+    n21@{ shape: rect}
+    n24@{ shape: rect}
+    n27@{ shape: rect}
+    n30@{ shape: rect}
+    n33@{ shape: rect}
+    n57@{ shape: rect}
+    n7@{ shape: rect}
+    n8@{ shape: rect}
+    n10@{ shape: rect}
+    n11@{ shape: rect}
+    n13@{ shape: rect}
+    n14@{ shape: rect}
+    n16@{ shape: rect}
+    n17@{ shape: rect}
+    n19@{ shape: rect}
+    n20@{ shape: rect}
+    n22@{ shape: rect}
+    n23@{ shape: rect}
+    n25@{ shape: rect}
+    n26@{ shape: rect}
+    n28@{ shape: rect}
+    n29@{ shape: rect}
+    n31@{ shape: rect}
+    n32@{ shape: rect}
+    n34@{ shape: rect}
+    n35@{ shape: rect}
+    n37@{ shape: rect}
+    n38@{ shape: rect}
+  ```
+
 Tip: Use `/dev/serial/by-id/*` stable device IDs to avoid ttyACM renumbering. These are configured in `host/config.yaml`.
 
 ## Configuration
