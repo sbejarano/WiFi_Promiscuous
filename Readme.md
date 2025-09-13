@@ -113,10 +113,11 @@ flowchart TB
 
 ```mermaid
   flowchart TD
- subgraph s1["USB HUB WITH POWER"]
+  subgraph s1["USB HUB WITH POWER"]
         n40["USB MUX"]
   end
- subgraph s2["Raspberry Pi 5"]
+
+  subgraph s2["Raspberry Pi 5"]
         n41["USB BUS"]
         n42["ttyACM0"]
         n43["ttyACM1"]
@@ -130,93 +131,75 @@ flowchart TB
         n52["ttyACM9"]
         n53["ttyACM10"]
         n54["ttyACM11"]
-        n55["ttyACM12"]
+        n55["ttyACM12 (GPS)"]
   end
-    C["Node 1"] --> n1["Tune to CH1<br>802.11"]
-    n1 --> n5["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    A(["Power"]) --> C & n6["Node 2"] & n9["Node 3"] & n12["Node 4"] & n15["Node 5"] & n18["Node 6"] & n21["Node 7"] & n24["Node 8"] & n27["Node 9"] & n30["Node 10"] & n33["Node 11"] & n39["Node 12"] & n57["GPS"]
-    n6 --> n7["Tune to CH2<br>802.11"]
-    n7 --> n8["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n9 --> n10["Tune to CH3<br>802.11"]
-    n10 --> n11["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n12 --> n13["Tune to CH4<br>802.11"]
-    n13 --> n14["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n15 --> n16["Tune to CH5<br>802.11"]
-    n16 --> n17["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n18 --> n19["Tune to CH6<br>802.11"]
-    n19 --> n20["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n21 --> n22["Tune to CH7<br>802.11"]
-    n22 --> n23["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n24 --> n25["Tune to CH8<br>802.11"]
-    n25 --> n26["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n27 --> n28["Tune to CH9<br>802.11"]
-    n28 --> n29["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n30 --> n31["Tune to CH10<br>802.11"]
-    n31 --> n32["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n33 --> n34["Tune to CH11<br>802.11"]
-    n34 --> n35["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n37["Scan All Channelszzzzzzz<br>802.11 every 3 secnds"] --> n38["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
-    n39 --> n37
-    n5 --> s1
-    n8 --> s1
-    n11 --> s1
-    n14 --> s1
-    n17 --> s1
-    n20 --> s1
-    n23 --> s1
-    n26 --> s1
-    n29 --> s1
-    n32 --> s1
-    n35 --> s1
-    n38 --> s1
-    n40 --> n41
-    n41 -- Ch1 --> n42
-    n41 -- Ch2 --> n43
-    n41 -- Ch3 --> n44
-    n41 -- Ch4 --> n45
-    n41 -- Ch5 --> n46
-    n41 -- Ch6 --> n47
-    n41 -- Ch7 --> n48
-    n41 -- Ch8 --> n49
-    n41 -- Ch9 --> n50
-    n41 -- Ch10 --> n52
-    n41 -- Ch11 --> n53
-    n41 -- Ch12 --> n54
-    n57 --> s1
-    n41 -- GPS --> n55
-    n6@{ shape: rect}
-    n9@{ shape: rect}
-    n12@{ shape: rect}
-    n15@{ shape: rect}
-    n18@{ shape: rect}
-    n21@{ shape: rect}
-    n24@{ shape: rect}
-    n27@{ shape: rect}
-    n30@{ shape: rect}
-    n33@{ shape: rect}
-    n57@{ shape: rect}
-    n7@{ shape: rect}
-    n8@{ shape: rect}
-    n10@{ shape: rect}
-    n11@{ shape: rect}
-    n13@{ shape: rect}
-    n14@{ shape: rect}
-    n16@{ shape: rect}
-    n17@{ shape: rect}
-    n19@{ shape: rect}
-    n20@{ shape: rect}
-    n22@{ shape: rect}
-    n23@{ shape: rect}
-    n25@{ shape: rect}
-    n26@{ shape: rect}
-    n28@{ shape: rect}
-    n29@{ shape: rect}
-    n31@{ shape: rect}
-    n32@{ shape: rect}
-    n34@{ shape: rect}
-    n35@{ shape: rect}
-    n37@{ shape: rect}
-    n38@{ shape: rect}
+
+  %% ESP32 Nodes
+  C["Node 1"] --> n1["Tune CH1<br>Capture BSSID, SSID, RSSI, CH, Freq"]
+  n6["Node 2"] --> n7["Tune CH2<br>Capture Wi-Fi"]
+  n9["Node 3"] --> n10["Tune CH3<br>Capture Wi-Fi"]
+  n12["Node 4"] --> n13["Tune CH4<br>Capture Wi-Fi"]
+  n15["Node 5"] --> n16["Tune CH5<br>Capture Wi-Fi"]
+  n18["Node 6"] --> n19["Tune CH6<br>Capture Wi-Fi"]
+  n21["Node 7"] --> n22["Tune CH7<br>Capture Wi-Fi"]
+  n24["Node 8"] --> n25["Tune CH8<br>Capture Wi-Fi"]
+  n27["Node 9"] --> n28["Tune CH9<br>Capture Wi-Fi"]
+  n30["Node 10"] --> n31["Tune CH10<br>Capture Wi-Fi"]
+  n33["Node 11"] --> n34["Tune CH11<br>Capture Wi-Fi"]
+  n39["Node 12"] --> n37["Scan All Channels<br>Rotate Every 3s"]
+  n37 --> n38["Capture Wi-Fi"]
+
+  %% GPS Node
+  n57["GPS Receiver"] 
+
+  %% Power Distribution
+  A(["Power"]) --> C & n6 & n9 & n12 & n15 & n18 & n21 & n24 & n27 & n30 & n33 & n39 & n57
+
+  %% Data Paths
+  n1 --> s1
+  n7 --> s1
+  n10 --> s1
+  n13 --> s1
+  n16 --> s1
+  n19 --> s1
+  n22 --> s1
+  n25 --> s1
+  n28 --> s1
+  n31 --> s1
+  n34 --> s1
+  n38 --> s1
+  n57 --> s1
+
+  n40 --> n41
+  n41 -- Ch1 --> n42
+  n41 -- Ch2 --> n43
+  n41 -- Ch3 --> n44
+  n41 -- Ch4 --> n45
+  n41 -- Ch5 --> n46
+  n41 -- Ch6 --> n47
+  n41 -- Ch7 --> n48
+  n41 -- Ch8 --> n49
+  n41 -- Ch9 --> n50
+  n41 -- Ch10 --> n52
+  n41 -- Ch11 --> n53
+  n41 -- Ch12 --> n54
+  n41 -- GPS --> n55
+
+  %% Processing
+  subgraph Processing["Aggregator Layer"]
+    agg["aggregator.py<br>• Reads serial frames<br>• Reads GPS NMEA + PPS<br>• Merges into records"]
+  end
+
+  %% Storage
+  subgraph Storage["Data Storage"]
+    db["SQLite DB: wifi_captures"]
+    csv["Optional CSV Export"]
+  end
+
+  %% Flow into processing and storage
+  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n54 & n55 --> agg
+  agg --> db
+  agg --> csv
   ```
 
 Tip: Use `/dev/serial/by-id/*` stable device IDs to avoid ttyACM renumbering. These are configured in `host/config.yaml`.
