@@ -4,12 +4,15 @@ A reproducible pipeline to capture 2.4 GHz Wi-Fi management frames simultaneousl
 
 ## Goals
 
-- Twelve probes, each fixed to a specific Wi-Fi channel (1–12) in promiscuous mode.
-- Host ingests all probe streams over USB and GPS NMEA (+ optional PPS).
-- GPS is the synchronization beacon: timestamps and alignment reference.
-- Each capture includes: BSSID, SSID, RSSI, BeaconInterval, NodeId, Channel, Frequency, UTC, Lat/Lon/Alt, Speed, Heading.
-- Storage in SQLite (default) or CSV for high-throughput logging.
-- Trilateration script produces GeoJSON of AP estimates, accounting for receiver motion.
+-Deploy 11 fixed Wi-Fi probes, each locked to a specific 2.4 GHz channel (1–11), operating in promiscuous mode.
+-Ingest data streams from all probes via USB, along with GPS NMEA input and optional PPS for high-accuracy timestamping.
+-Utilize two directional probes, positioned 180° apart, scanning all 11 channels. These help estimate the side of the road or vessel path where an AP is located by comparing RSSI per BSSID, enhancing directional awareness in trilateration.
+-Use GPS as the master clock, providing synchronized UTC timestamps and positional context for all probe captures.
+
+Each capture record includes:
+-BSSID, SSID, RSSI, Beacon Interval, Node ID, Channel, Frequency, UTC Timestamp, Latitude, Longitude, Altitude, Speed, and Heading.
+-Support for SQLite (default) or CSV storage to enable efficient logging in both research and production environments.
+-Generate GeoJSON maps of estimated AP locations, using either RSSI-based radius mapping or trilateration that accounts for receiver movement and signal geometry.
 
 ## Repository Layout
 
