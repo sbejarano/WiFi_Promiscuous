@@ -54,7 +54,9 @@ flowchart TB
         P9["Node 9<br/>Ch 9"]
         P10["Node 10<br/>Ch 10"]
         P11["Node 11<br/>Ch 11"]
-        P12["Node 12<br/>Ch 12"]
+        P12["GPS"]
+        P13["Node 12<br/>Ch Scan"]
+        P14["Node 13<br/>Ch Scan"]
     end
 
     HUB[Powered USB Hub / Power Bar]
@@ -73,6 +75,8 @@ flowchart TB
     P10 --> HUB
     P11 --> HUB
     P12 --> HUB
+    P13 --> HUB
+    P14--> HUB
     HUB --> HOST
     G --> HUB
 
@@ -109,7 +113,8 @@ flowchart TB
 
 ## Hardware
 
-- 12 × Seeed XIAO ESP32 (or ESP32 variants), each fixed to one channel (1–12).
+- 13 × Seeed XIAO ESP32 S3 (or ESP32 variants), each fixed to one channel (1–11).
+- 2 x Seed XIAO ESP32 S3 one with directional antena pointing to the left of the vessel and the other to the right at 180 degrees one from the other to help find the side of the vessel where the 2.4Ghs signal is coming from and help the trilateration algorith accuracy.
 - Powered USB hub with sufficient current for all probes plus GPS.
 - GPS receiver providing NMEA (USB) and PPS.
 - Linux host (Debian/Ubuntu/Raspberry Pi OS).
@@ -238,7 +243,7 @@ flowchart TB
   end
 
   %% Flow into processing and storage
-  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 --> agg
+  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 & n65 --> agg
   agg --> db
   agg --> csv
 
