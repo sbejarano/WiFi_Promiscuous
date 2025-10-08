@@ -61,7 +61,7 @@ flowchart TB
 
     HUB[Powered USB Hub / Power Bar]
     HOST[Linux Host]
-    G["USB GNSS NMEA with PPS"]
+    
 
     P1 --> HUB
     P2 --> HUB
@@ -78,7 +78,7 @@ flowchart TB
     P13 --> HUB
     P14--> HUB
     HUB --> HOST
-    G --> HUB
+  
 
     %% --- Aggregator internals ---
     subgraph Aggregator["host/aggregator.py"]
