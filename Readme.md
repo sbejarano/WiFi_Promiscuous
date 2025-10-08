@@ -120,7 +120,7 @@ flowchart TB
 - Linux host (Debian/Ubuntu/Raspberry Pi OS).
 
 ```mermaid
- flowchart TD
+flowchart TD
  subgraph s1["USB HUB WITH POWER"]
         n40["USB MUX"]
   end
@@ -243,7 +243,7 @@ flowchart TB
   end
 
   %% Flow into processing and storage
-  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 & n65 --> agg
+  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 --> agg
   agg --> db
   agg --> csv
 
