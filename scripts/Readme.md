@@ -79,3 +79,22 @@ scripts/
 - Run all scripts from inside the `scripts/` directory.
 - Ensure ESP32 devices appear under `/dev/serial/by-id/` and GPS is not occupied by `gpsd` before running.
 - GeoJSON exports can be loaded directly into GIS tools or Google Earth.sitions.
+
+inspect_matrix.py
+
+[06:39:00 UTC] Wi-Fi: 67,717  |  GPS: 264
+------------------------------------------------------------------------------------------
+          timestamp    node  channel  rssi             bssid                      ssid       lat        lon
+2025-10-21 06:38:42  node_5        0   -80 A2:C9:EB:16:84:4C               Harouffnet1 38.059642 -78.952631
+2025-10-21 06:38:42  node_5        0   -80 A2:C9:EB:16:84:4C               Harouffnet1 38.059652 -78.952631
+2025-10-21 06:38:42  node_8        0   -83 A2:C9:EB:16:84:4C               Harouffnet1 38.059642 -78.952631
+2025-10-21 06:38:42  node_8        0   -83 A2:C9:EB:16:84:4C               Harouffnet1 38.059652 -78.952631
+2025-10-21 06:38:42 node_12        0   -81 4E:74:89:43:DD:10                    hidden 38.059642 -78.952631
+2025-10-21 06:38:42 node_12        0   -81 4E:74:89:43:DD:10                    hidden 38.059652 -78.952631
+2025-10-21 06:38:42 node_12        0   -56 00:11:32:8C:B7:1B www.valleyphotomaster.com 38.059642 -78.952631
+2025-10-21 06:38:42 node_12        0   -56 00:11:32:8C:B7:1B www.valleyphotomaster.com 38.059652 -78.952631
+2025-10-21 06:38:42  node_9        0   -83 CC:40:D0:FB:EE:0D             diehlwireless 38.059642 -78.952631
+2025-10-21 06:38:42  node_9        0   -83 CC:40:D0:FB:EE:0D             diehlwireless 38.059652 -78.952631
+------------------------------------------------------------------------------------------
+Press Ctrl+C to exit. Refreshing every 5 seconds…
+
