@@ -3,7 +3,7 @@
 #include <esp_wifi.h>
 #include <ArduinoJson.h>
 
-#define WIFI_CHANNEL 12        // ← fixed per node (1–12)
+#define WIFI_CHANNEL 1        // ← fixed per node (1–12)
 #define NODE_ID 1              // ← unique per ESP32
 #define SERIAL_BAUD 115200
 #define FILTER_BEACONS_ONLY false
