@@ -15,7 +15,7 @@ Each capture record includes:
 - Generate GeoJSON maps of estimated AP locations, using either RSSI-based radius mapping or trilateration that accounts for receiver movement and signal geometry.
 
 ## Repository Layout
-```
+```mermaid
 flowchart LR
   A["Data Curator / Aggregator"] --> B["Live Monitor\n(RSSI, Node, BSSID, SSID)"]
   A --> C["SQLite\n(buffered WiFi samples)"]
