@@ -15,6 +15,19 @@ Each capture record includes:
 - Generate GeoJSON maps of estimated AP locations, using either RSSI-based radius mapping or trilateration that accounts for receiver movement and signal geometry.
 
 ## Repository Layout
+```
+flowchart LR
+  A["Data Curator / Aggregator"] --> B["Live Monitor\n(RSSI, Node, BSSID, SSID)"]
+  A --> C["SQLite\n(buffered WiFi samples)"]
+  B --> D["Left/Right Strength Comparator"]
+  C --> E["Segment Buffer\n(per BSSID)"]
+  D --> F["Segment Buffer\n(per BSSID)"]
+  F --> G["Filter for ≥3 Nodes\n(Fixed)"]
+  G --> H["Circle Intersection\nTrilateration"]
+  H --> I["Output: Estimated AP Position"]
+  I --> J["Trilaterated APs DB"]
+  J --> K["GeoJSON Export for QGIS"]
+```
 
 ```
 wifi_promiscuous/
