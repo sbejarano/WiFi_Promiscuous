@@ -5,7 +5,7 @@
 // ================= USER CONFIG ======================
 #define NODE_NAME   "RIGHT"        // change to "LEFT" or "RIGHT"
 #define SERIAL_BAUD 115200
-#define SCAN_DELAY  1000           // ms between sweeps
+#define SCAN_DELAY  100           // ms between sweeps
 #define INCLUDE_HIDDEN false        // ignore hidden SSIDs
 #define LED_PIN     48             // onboard RGB LED
 #define LED_COUNT   1
@@ -125,8 +125,7 @@ void serialTask(void *pv) {
 // ====================================================
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  while(!Serial) delay(10);
-
+  delay(400);
   Serial.println("\n--- ESP32-S3 WiFi Sweep Scanner (LEFT/RIGHT) ---");
 
   led.begin();
@@ -141,4 +140,4 @@ void setup() {
   xTaskCreatePinnedToCore(serialTask, "serialTask", 8192, NULL, 1, NULL, 1);
 }
 
-void loop() { vTaskDelay(pdMS_TO_TICKS(1000)); }
+void loop() { vTaskDelay(pdMS_TO_TICKS(100)); }
