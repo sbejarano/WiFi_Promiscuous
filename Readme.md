@@ -399,3 +399,6 @@ ts_utc,node_id,channel,frequency_mhz,bssid,ssid,rssi_dbm,beacon_interval_ms,gps_
 
 - Use only lawful capture methods; stick to management frames for RF mapping.
 - Keep the hub powered and use short, quality cables to minimize serial errors.
+- 
+## Display view
+<img width="1715" height="800" alt="image" src="https://github.com/user-attachments/assets/22ab8a53-dbf9-4f71-bfa4-2326360a2dff" />
