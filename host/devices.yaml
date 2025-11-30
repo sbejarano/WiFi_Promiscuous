@@ -1,0 +1,70 @@
+# Master device-to-role mapping for WiFi Promiscuous System
+# Location: /media/sbejarano/Developer1/wifi_promiscuous/host/devices.yaml
+
+gps:
+  manufacturer: "u-blox AG - www.u-blox.com"
+  port: "/dev/ttyACM0"
+
+directional:
+  left:
+    mac: "B8:F8:62:FB:56:2C"
+  right:
+    mac: "B8:F8:62:FB:50:9C"
+
+scanners:
+  - mac: "FC:01:2C:CB:BC:CC"
+    port: "/dev/ttyACM1"
+    node_id: 1
+
+  - mac: "B8:F8:62:FA:0C:70"
+    port: "/dev/ttyACM10"
+    node_id: 2
+
+  - mac: "B8:F8:62:FA:12:2C"
+    port: "/dev/ttyACM11"
+    node_id: 3
+
+  - mac: "B8:F8:62:F6:D8:10"
+    port: "/dev/ttyACM12"
+    node_id: 4
+
+  - mac: "B8:F8:62:F6:D7:AC"
+    port: "/dev/ttyACM13"
+    node_id: 5
+
+  - mac: "B8:F8:62:FB:50:A8"
+    port: "/dev/ttyACM14"
+    node_id: 6
+
+  - mac: "B8:F8:62:FB:50:9C"
+    port: "/dev/ttyACM2"
+    node_id: right  # override by directional
+
+  - mac: "B8:F8:62:FB:56:2C"
+    port: "/dev/ttyACM3"
+    node_id: left   # override by directional
+
+  - mac: "FC:01:2C:CB:BA:14"
+    port: "/dev/ttyACM4"
+    node_id: 7
+
+  - mac: "B8:F8:62:FB:57:74"
+    port: "/dev/ttyACM5"
+    node_id: 8
+
+  - mac: "B8:F8:62:FA:12:1C"
+    port: "/dev/ttyACM6"
+    node_id: 9
+
+  - mac: "B8:F8:62:F6:D8:08"
+    port: "/dev/ttyACM7"
+    node_id: 10
+
+  - mac: "B8:F8:62:FB:4F:04"
+    port: "/dev/ttyACM8"
+    node_id: 11
+
+  - mac: "B8:F8:62:FB:5E:54"
+    port: "/dev/ttyACM9"
+    node_id: 12
+
