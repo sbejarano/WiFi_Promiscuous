@@ -294,4 +294,3 @@ Use only where lawful.
 ✔ Centralized timestamping
 ✔ Deterministic fusion
 
-This system is **architecturally complete and correct**.
