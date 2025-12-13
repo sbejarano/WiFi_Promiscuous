@@ -2,21 +2,27 @@
 #include <WiFi.h>
 #include <Adafruit_NeoPixel.h>
 
-// ================= USER CONFIG ======================
-#define NODE_NAME   "RIGHT"        // change to "LEFT" or "RIGHT"
+/* ================= USER CONFIG ====================== */
+
+#define NODE_NAME   "RIGHT"        // "LEFT" or "RIGHT"
 #define SERIAL_BAUD 115200
-#define SCAN_DELAY  100           // ms between sweeps
-#define INCLUDE_HIDDEN false        // ignore hidden SSIDs
-#define LED_PIN     48             // onboard RGB LED
+#define SCAN_DELAY  100            // ms between full sweeps
+#define INCLUDE_HIDDEN false
+
+// XIAO ESP32-S3 onboard RGB LED
+#define LED_PIN     48
 #define LED_COUNT   1
-// ====================================================
+
+/* =================================================== */
 
 // ---------- RGB LED ----------
 Adafruit_NeoPixel led(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // ---------- RING BUFFER ----------
 struct ScanRec {
-  uint32_t ts;
+  uint64_t esp_us;        // monotonic µs (esp_timer)
+  uint32_t sweep_id;
+  uint32_t sample_id;
   uint8_t  ch;
   int8_t   rssi;
   char     bssid[18];
@@ -26,6 +32,9 @@ struct ScanRec {
 #define RING_SIZE 256
 static ScanRec ring[RING_SIZE];
 static volatile uint16_t head = 0, tail = 0;
+
+static uint32_t sweep_counter  = 0;
+static uint32_t sample_counter = 0;
 
 bool ringFull()  { return ((head + 1U) % RING_SIZE) == tail; }
 bool ringEmpty() { return head == tail; }
@@ -45,76 +54,108 @@ bool ringPop(ScanRec &r) {
 }
 
 // ---------- LED HELPERS ----------
-void ledSet(uint8_t r, uint8_t g, uint8_t b) {
+inline void ledSet(uint8_t r, uint8_t g, uint8_t b) {
   led.setPixelColor(0, led.Color(r, g, b));
   led.show();
 }
 
-void ledFlash(uint8_t r, uint8_t g, uint8_t b, int dur = 80) {
-  ledSet(r,g,b);
-  delay(dur);
-  ledSet(0,0,0);
+// brief non-blocking pulse
+void ledPulseGreen() {
+  ledSet(0, 40, 0);
+  delay(30);
+  ledSet(0, 0, 0);
 }
 
-// ====================================================
-// TASK: Wi-Fi scanning  (Core 0)
+/* ==================================================== */
+/* TASK: Wi-Fi sweep scanning (Core 0)                  */
+/* ==================================================== */
 void wifiTask(void *pv) {
+
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true, true);
   delay(100);
 
   for (;;) {
 
-    // 🔵 BLINK ONCE PER FULL 14-CHANNEL SWEEP
-    ledFlash(0, 40, 0, 80);   // dim green blink per sweep
+    sweep_counter++;
+    sample_counter = 0;
+
+    // Visual indicator: one blink per sweep
+    ledPulseGreen();
 
     int n = WiFi.scanNetworks(false, INCLUDE_HIDDEN);
-    uint32_t now = millis();
+    uint64_t sweep_ts_us = esp_timer_get_time();
 
     if (n < 0) {
-      ledSet(255,0,0);        // red = error
-      Serial.printf("{\"node\":\"%s\",\"error\":\"scan_failed\"}\n", NODE_NAME);
-      vTaskDelay(pdMS_TO_TICKS(2000));
+      ledSet(255, 0, 0);
+      Serial.printf(
+        "{\"node\":\"%s\",\"error\":\"scan_failed\",\"esp_us\":%llu}\n",
+        NODE_NAME, sweep_ts_us
+      );
+      vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
 
-    ledSet(0,80,0);           // on while parsing
+    ledSet(0, 0, 40); // dim blue while parsing
 
-    for (int i=0; i<n; i++) {
+    for (int i = 0; i < n; i++) {
+
       if (!INCLUDE_HIDDEN && WiFi.SSID(i).isEmpty())
         continue;
 
       ScanRec rec;
-      rec.ts   = now;
-      rec.ch   = WiFi.channel(i);
-      rec.rssi = WiFi.RSSI(i);
+      rec.esp_us    = esp_timer_get_time();
+      rec.sweep_id  = sweep_counter;
+      rec.sample_id = ++sample_counter;
+      rec.ch        = WiFi.channel(i);
+      rec.rssi      = WiFi.RSSI(i);
+
       strncpy(rec.ssid, WiFi.SSID(i).c_str(), 32);
       rec.ssid[32] = '\0';
-      snprintf(rec.bssid,sizeof(rec.bssid), "%s", WiFi.BSSIDstr(i).c_str());
+
+      snprintf(rec.bssid, sizeof(rec.bssid),
+               "%s", WiFi.BSSIDstr(i).c_str());
 
       ringPush(rec);
     }
 
     WiFi.scanDelete();
-    ledSet(0,0,0);            // LED off during idle
+    ledSet(0, 0, 0);
 
     vTaskDelay(pdMS_TO_TICKS(SCAN_DELAY));
   }
 }
 
-// ====================================================
-// TASK: Serial output  (Core 1)
+/* ==================================================== */
+/* TASK: Serial output (Core 1)                          */
+/* ==================================================== */
 void serialTask(void *pv) {
-  Serial.printf("{\"node\":\"%s\",\"status\":\"ready\"}\n", NODE_NAME);
+
+  Serial.printf(
+    "{\"node\":\"%s\",\"status\":\"ready\"}\n",
+    NODE_NAME
+  );
 
   for (;;) {
     ScanRec rec;
     if (ringPop(rec)) {
       Serial.printf(
-        "{\"node\":\"%s\",\"ts\":%lu,\"ch\":%d,"
-        "\"rssi\":%d,\"bssid\":\"%s\",\"ssid\":\"%s\"}\n",
-        NODE_NAME, rec.ts, rec.ch,
-        rec.rssi, rec.bssid, rec.ssid
+        "{\"node\":\"%s\","
+        "\"esp_us\":%llu,"
+        "\"sweep\":%lu,"
+        "\"sample\":%lu,"
+        "\"ch\":%d,"
+        "\"rssi\":%d,"
+        "\"bssid\":\"%s\","
+        "\"ssid\":\"%s\"}\n",
+        NODE_NAME,
+        rec.esp_us,
+        rec.sweep_id,
+        rec.sample_id,
+        rec.ch,
+        rec.rssi,
+        rec.bssid,
+        rec.ssid
       );
     } else {
       vTaskDelay(pdMS_TO_TICKS(5));
@@ -122,22 +163,28 @@ void serialTask(void *pv) {
   }
 }
 
-// ====================================================
+/* ==================================================== */
 void setup() {
+
   Serial.begin(SERIAL_BAUD);
-  delay(400);
-  Serial.println("\n--- ESP32-S3 WiFi Sweep Scanner (LEFT/RIGHT) ---");
+  delay(300);
 
   led.begin();
   led.clear();
   led.show();
-  ledSet(0,0,20);               // dim blue = booting
+  ledSet(0, 0, 20);   // boot indicator
 
-  // Core 0 = WiFi Scan
-  xTaskCreatePinnedToCore(wifiTask, "wifiTask", 12288, NULL, 2, NULL, 0);
+  xTaskCreatePinnedToCore(
+    wifiTask, "wifiTask",
+    12288, NULL, 2, NULL, 0
+  );
 
-  // Core 1 = Serial output
-  xTaskCreatePinnedToCore(serialTask, "serialTask", 8192, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(
+    serialTask, "serialTask",
+    8192, NULL, 1, NULL, 1
+  );
 }
 
-void loop() { vTaskDelay(pdMS_TO_TICKS(100)); }
+void loop() {
+  vTaskDelay(pdMS_TO_TICKS(100));
+}
