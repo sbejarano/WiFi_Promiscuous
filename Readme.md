@@ -233,14 +233,48 @@ CREATE TABLE wifi_captures (
 
 ---
 
-## Trilateration Pipeline
+## Left / Right Directional Discriminator
 
-1. Group captures by `bssid`
-2. Segment by motion window
-3. Compare LEFT/RIGHT RSSI
-4. Estimate AP side of path
-5. RSSI‑weighted circle or intersection solve
-6. Export GeoJSON
+The LEFT and RIGHT directional probes scan all channels and do **not** participate in fixed-channel trilateration directly. Instead, they provide **side-of-path discrimination** by comparing RSSI per BSSID within the same sweep window.
+
+The discriminator operates entirely on the host and influences **weighting and labeling** during storage and later trilateration.
+
+```mermaid
+flowchart TD
+
+  A[Wi-Fi Capture<br/>from Fixed Channel Nodes] --> B[Aggregator Ingest]
+  L[LEFT Directional Probe<br/>Full Scan] --> B
+  R[RIGHT Directional Probe<br/>Full Scan] --> B
+
+  B --> C[Group by BSSID
+within Sweep Window]
+
+  C --> D{LEFT vs RIGHT
+RSSI Available?}
+
+  D -->|Yes| E[Compare RSSI
+LEFT vs RIGHT]
+  D -->|No| F[Mark Side = Unknown]
+
+  E -->|LEFT > RIGHT + Δ| G[Side = LEFT]
+  E -->|RIGHT > LEFT + Δ| H[Side = RIGHT]
+  E -->|≈ Equal| I[Side = CENTER / AMBIGUOUS]
+
+  G --> J[Annotate Record
+side_hint=LEFT]
+  H --> J
+  I --> J
+  F --> J
+
+  J --> K[(SQLite / CSV Storage)]
+  K --> M[Trilateration / GeoJSON]
+```
+
+**Notes**:
+
+* Δ (delta) is a configurable RSSI threshold to avoid noise-based flips.
+* Directional probes are advisory; fixed-channel probes remain authoritative for RF geometry.
+* `side_hint` is stored as metadata and used to bias or filter solutions.
 
 ---
 
