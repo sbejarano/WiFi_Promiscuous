@@ -4,12 +4,12 @@
 
 /* ================= USER CONFIG ====================== */
 
-#define NODE_NAME   "RIGHT"        // "LEFT" or "RIGHT"
+#define NODE_NAME   "LEFT"        // "LEFT" or "RIGHT"
 #define SERIAL_BAUD 115200
 #define SCAN_DELAY  100            // ms between full sweeps
 #define INCLUDE_HIDDEN false
 
-// XIAO ESP32-S3 onboard RGB LED
+// ESP32-S3 Dev Module
 #define LED_PIN     48
 #define LED_COUNT   1
 
@@ -80,7 +80,6 @@ void wifiTask(void *pv) {
     sweep_counter++;
     sample_counter = 0;
 
-    // Visual indicator: one blink per sweep
     ledPulseGreen();
 
     int n = WiFi.scanNetworks(false, INCLUDE_HIDDEN);
@@ -96,7 +95,7 @@ void wifiTask(void *pv) {
       continue;
     }
 
-    ledSet(0, 0, 40); // dim blue while parsing
+    ledSet(0, 0, 40);
 
     for (int i = 0; i < n; i++) {
 
@@ -167,12 +166,12 @@ void serialTask(void *pv) {
 void setup() {
 
   Serial.begin(SERIAL_BAUD);
-  delay(300);
+  while (!Serial) {}   // <<< ONLY ADDITION — REQUIRED FOR ESP32-S3 CDC
 
   led.begin();
   led.clear();
   led.show();
-  ledSet(0, 0, 20);   // boot indicator
+  ledSet(0, 0, 20);
 
   xTaskCreatePinnedToCore(
     wifiTask, "wifiTask",
