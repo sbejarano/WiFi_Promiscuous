@@ -208,6 +208,125 @@ flowchart TD
 
 ## Services & systemd Architecture
 
+The diagram below focuses **purely on hardware → USB → systemd services → storage**, rendered in **GitHub-compliant Mermaid** (no themes, no experimental directives).
+
+```mermaid
+flowchart TD
+
+  %% ==============================
+  %% POWER + PROBES
+  %% ==============================
+  PWR[Power Distribution]
+
+  subgraph PROBES[ESP32 XIAO Probes]
+    N1[Node 1\nFixed CH1]
+    N2[Node 2\nFixed CH2]
+    N3[Node 3\nFixed CH3]
+    N4[Node 4\nFixed CH4]
+    N5[Node 5\nFixed CH5]
+    N6[Node 6\nFixed CH6]
+    N7[Node 7\nFixed CH7]
+    N8[Node 8\nFixed CH8]
+    N9[Node 9\nFixed CH9]
+    N10[Node 10\nFixed CH10]
+    N11[Node 11\nFixed CH11]
+    NL[LEFT Directional\nScan All]
+    NR[RIGHT Directional\nScan All]
+    GPS[GPS + PPS Module]
+  end
+
+  PWR --> PROBES
+
+  %% ==============================
+  %% USB HUB
+  %% ==============================
+  subgraph HUB[Powered USB Hub]
+    MUX[USB Multiplexer]
+  end
+
+  PROBES --> MUX
+
+  %% ==============================
+  %% RASPBERRY PI USB
+  %% ==============================
+  subgraph PI[Raspberry Pi 5]
+    USB[USB Bus]
+    ACM1[/ttyACM1/]
+    ACM2[/ttyACM2/]
+    ACM3[/ttyACM3/]
+    ACM4[/ttyACM4/]
+    ACM5[/ttyACM5/]
+    ACM6[/ttyACM6/]
+    ACM7[/ttyACM7/]
+    ACM8[/ttyACM8/]
+    ACM9[/ttyACM9/]
+    ACM10[/ttyACM10/]
+    ACM11[/ttyACM11/]
+    ACM12[/ttyACM12/]
+    UART[/dev/serial0/]
+    PPS[/dev/pps0/]
+  end
+
+  MUX --> USB
+
+  USB --> ACM1 & ACM2 & ACM3 & ACM4 & ACM5 & ACM6 & ACM7 & ACM8 & ACM9 & ACM10 & ACM11 & ACM12
+  GPS --> UART
+  GPS --> PPS
+
+  %% ==============================
+  %% SYSTEMD SERVICES
+  %% ==============================
+  subgraph SERVICES[systemd Services]
+    CAP[wifi_capture.service]
+    BRK[broker.service]
+    GPSD[gpsd.service]
+    GPSPPS[gps-pps.service]
+    DB[wifi-db.service]
+    MON[system_monitor.service]
+  end
+
+  ACM1 & ACM2 & ACM3 & ACM4 & ACM5 & ACM6 & ACM7 & ACM8 & ACM9 & ACM10 & ACM11 & ACM12 --> CAP
+  CAP --> BRK
+
+  UART --> GPSD
+  PPS --> GPSPPS
+  GPSD --> GPSPPS
+
+  BRK --> DB
+  GPSPPS --> DB
+
+  %% ==============================
+  %% CONTROL + STORAGE
+  %% ==============================
+  STATE[capture.state]
+  UI[HTML Dashboard]
+
+  UI --> STATE
+  STATE --> DB
+
+  subgraph STORAGE[Persistent Storage]
+    SQLITE[(trilateration_data.db)]
+    CSV[(CSV / GeoJSON Export)]
+  end
+
+  DB --> SQLITE
+  SQLITE --> CSV
+  MON --> UI
+```
+
+**Key characteristics**:
+
+* All ESP32 devices are passive data sources
+* USB provides transport only (no timing authority)
+* GPS + PPS discipline the host clock
+* systemd services remain running continuously
+* `capture.state` gates ingestion without restarts
+* SQLite is the single source of truth
+
+---
+
+## GPS & Time Discipline
+
 The system is composed of **long-running systemd services** that remain active at all times, with **runtime behavior gated by state files**, not service restarts.
 
 This design avoids:
