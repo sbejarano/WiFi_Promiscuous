@@ -206,6 +206,63 @@ flowchart TD
 
 ---
 
+## Services & systemd Architecture
+
+The system is composed of **long-running systemd services** that remain active at all times, with **runtime behavior gated by state files**, not service restarts.
+
+This design avoids:
+
+* service churn
+* WAL corruption
+* loss of in-memory buffers
+* race conditions
+
+### Service Responsibilities
+
+| Service                  | Purpose                                    |
+| ------------------------ | ------------------------------------------ |
+| `gpsd.service`           | Reads GNSS NMEA from `/dev/serial0`        |
+| `gps-pps.service`        | Generates `gps.json`, validates PPS & fix  |
+| `wifi_capture.service`   | Reads ESP32 USB JSON streams               |
+| `broker.service`         | Normalizes and fans out capture data       |
+| `wifi-db.service`        | Ingests, fuses, and stores data (UI-gated) |
+| `system_monitor.service` | Health & telemetry export                  |
+
+### Service Interaction Diagram
+
+```mermaid
+flowchart TB
+
+    subgraph systemd[systemd Services]
+        GPSD[gpsd.service]
+        GPSPPS[gps-pps.service]
+        WIFICAP[wifi_capture.service]
+        BROKER[broker.service]
+        DB[wifi-db.service]
+        MON[system_monitor.service]
+    end
+
+    GPSD --> GPSPPS
+    GPSPPS -->|gps.json| DB
+
+    WIFICAP -->|USB JSON| BROKER
+    BROKER -->|normalized JSON| DB
+
+    MON -->|status JSON| UI[HTML Dashboard]
+
+    UI -->|START / STOP| STATE[capture.state]
+    STATE --> DB
+```
+
+**Key points**:
+
+* Services remain running continuously
+* `wifi-db.service` checks `capture.state` before every ingest cycle
+* UI never restarts services
+* GPS remains authoritative even when capture is stopped
+
+---
+
 ## GPS & Time Discipline
 
 * GPS NMEA via `/dev/serial0`
@@ -268,3 +325,4 @@ Operate only where lawful.
 ✔ UI‑controlled capture
 ✔ Directional inference
 ✔ Ready for spatial analysis
+
