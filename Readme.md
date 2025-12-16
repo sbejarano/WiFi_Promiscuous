@@ -208,7 +208,7 @@ flowchart TD
 
 ## Services & systemd Architecture
 
-The diagram below focuses **purely on hardware → USB → systemd services → storage**, rendered in **GitHub-compliant Mermaid** (no themes, no experimental directives).
+The diagram below focuses **purely on hardware → USB → systemd services → storage**, rendered in **GitHub‑compliant Mermaid** (no themes, no experimental directives).
 
 ```mermaid
 flowchart TD
@@ -219,19 +219,32 @@ flowchart TD
   PWR[Power Distribution]
 
   subgraph PROBES[ESP32 XIAO Probes]
-    N1[Node 1\nFixed CH1]
-    N2[Node 2\nFixed CH2]
-    N3[Node 3\nFixed CH3]
-    N4[Node 4\nFixed CH4]
-    N5[Node 5\nFixed CH5]
-    N6[Node 6\nFixed CH6]
-    N7[Node 7\nFixed CH7]
-    N8[Node 8\nFixed CH8]
-    N9[Node 9\nFixed CH9]
-    N10[Node 10\nFixed CH10]
-    N11[Node 11\nFixed CH11]
-    NL[LEFT Directional\nScan All]
-    NR[RIGHT Directional\nScan All]
+    N1[Node 1
+Fixed CH1]
+    N2[Node 2
+Fixed CH2]
+    N3[Node 3
+Fixed CH3]
+    N4[Node 4
+Fixed CH4]
+    N5[Node 5
+Fixed CH5]
+    N6[Node 6
+Fixed CH6]
+    N7[Node 7
+Fixed CH7]
+    N8[Node 8
+Fixed CH8]
+    N9[Node 9
+Fixed CH9]
+    N10[Node 10
+Fixed CH10]
+    N11[Node 11
+Fixed CH11]
+    NL[LEFT Directional
+Scan All]
+    NR[RIGHT Directional
+Scan All]
     GPS[GPS + PPS Module]
   end
 
