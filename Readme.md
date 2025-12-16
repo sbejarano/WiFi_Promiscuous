@@ -208,123 +208,145 @@ flowchart TD
 
 ## Services & systemd Architecture
 
-The diagram below focuses **purely on hardware → USB → systemd services → storage**, rendered in **GitHub‑compliant Mermaid** (no themes, no experimental directives).
-
+The diagram below focuses **purely on hardware → USB → systemd services → storage**
 ```mermaid
 flowchart TD
+ subgraph s1["USB HUB WITH POWER"]
+        n40["USB MUX"]
+  end
+ subgraph s2["Raspberry Pi 5"]
+        n57["GPIO-18"]
+        n71["UART"]
+        n41["USB BUS"]
+        n42["ttyACM0"]
+        n43["ttyACM1"]
+        n44["ttyACM2"]
+        n45["ttyACM3"]
+        n46["ttyACM4"]
+        n47["ttyACM5"]
+        n48["ttyACM6"]
+        n49["ttyACM7"]
+        n50["ttyACM8"]
+        n52["ttyACM9"]
+        n53["ttyACM10"]
+        n63["ttyACM11"]
+        n64["ttyACM12"]
+        n55["ttyACM13"]
+       
+  end
+    C["Node 1"] --> n1["Tune to CH1<br>802.11"]
+    n1 --> n5["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    A(["Power"]) --> C & n6["Node 2"] & n9["Node 3"] & n12["Node 4"] & n15["Node 5"] & n18["Node 6"] & n21["Node 7"] & n24["Node 8"] & n27["Node 9"] & n30["Node 10"] & n33["Node 11"] & n39["Node 12"] & n60["Node 13"] & n65["Node 14"] & n58["GPS"]
+    n6 --> n7["Tune to CH2<br>802.11"]
+    n7 --> n8["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n9 --> n10["Tune to CH3<br>802.11"]
+    n10 --> n11["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n12 --> n13["Tune to CH4<br>802.11"]
+    n13 --> n14["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n15 --> n16["Tune to CH5<br>802.11"]
+    n16 --> n17["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n18 --> n19["Tune to CH6<br>802.11"]
+    n19 --> n20["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n21 --> n22["Tune to CH7<br>802.11"]
+    n22 --> n23["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n24 --> n25["Tune to CH8<br>802.11"]
+    n25 --> n26["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n27 --> n28["Tune to CH9<br>802.11"]
+    n28 --> n29["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n30 --> n31["Tune to CH10<br>802.11"]
+    n31 --> n32["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n33 --> n34["Tune to CH11<br>802.11"]
+    n34 --> n35["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n37["Scan All Channels<br>802.11 every 3 secnds"] --> n38["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n61["Scan All Channels<br>802.11 every 3 seconds"] --> n62["Capture:<br>BSSID<br>SSIC<br>RSSI<br>CH#<br>Frequency"]
+    n65 --> n66["Scan All Channels<br>802.11 every 3 seconds"] --> n67["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
+    n58 --> n69["PPS"]
+    n69 --> n57
+    n39 --> n37
+    n57 --> s2
+    n5 --> s1
+    n8 --> s1
+    n11 --> s1
+    n14 --> s1
+    n17 --> s1
+    n20 --> s1
+    n23 --> s1
+    n26 --> s1
+    n29 --> s1
+    n32 --> s1
+    n35 --> s1
+    n38 --> s1
+    n40 --> n41
+    n41 -- Ch1 --> n42
+    n41 -- Ch2 --> n43
+    n41 -- Ch3 --> n44
+    n41 -- Ch4 --> n45
+    n41 -- Ch5 --> n46
+    n41 -- Ch6 --> n47
+    n41 -- Ch7 --> n48
+    n41 -- Ch8 --> n49
+    n41 -- Ch9 --> n50
+    n41 -- Ch10 --> n52
+    n41 -- Ch11 --> n53
+    n41 -- Scan --> n63
+    n41 -- Scan --> n64
+    n60 --> n61
+    n62 --> s1
+    n67 --> s1
+    n58 --> n70["NMEA"]
+    n70 --> n71
+    n71 --> s2
+    n41 -- GPS --> n55
+    n6@{ shape: rect}
+    n9@{ shape: rect}
+    n12@{ shape: rect}
+    n15@{ shape: rect}
+    n18@{ shape: rect}
+    n21@{ shape: rect}
+    n24@{ shape: rect}
+    n27@{ shape: rect}
+    n30@{ shape: rect}
+    n33@{ shape: rect}
+    n57@{ shape: rect}
+    n7@{ shape: rect}
+    n8@{ shape: rect}
+    n10@{ shape: rect}
+    n11@{ shape: rect}
+    n13@{ shape: rect}
+    n14@{ shape: rect}
+    n16@{ shape: rect}
+    n17@{ shape: rect}
+    n19@{ shape: rect}
+    n20@{ shape: rect}
+    n22@{ shape: rect}
+    n23@{ shape: rect}
+    n25@{ shape: rect}
+    n26@{ shape: rect}
+    n28@{ shape: rect}
+    n29@{ shape: rect}
+    n31@{ shape: rect}
+    n32@{ shape: rect}
+    n34@{ shape: rect}
+    n35@{ shape: rect}
+    n37@{ shape: rect}
+    n38@{ shape: rect}
 
-  %% ==============================
-  %% POWER + PROBES
-  %% ==============================
-  PWR[Power Distribution]
-
-  subgraph PROBES[ESP32 XIAO Probes]
-    N1[Node 1
-Fixed CH1]
-    N2[Node 2
-Fixed CH2]
-    N3[Node 3
-Fixed CH3]
-    N4[Node 4
-Fixed CH4]
-    N5[Node 5
-Fixed CH5]
-    N6[Node 6
-Fixed CH6]
-    N7[Node 7
-Fixed CH7]
-    N8[Node 8
-Fixed CH8]
-    N9[Node 9
-Fixed CH9]
-    N10[Node 10
-Fixed CH10]
-    N11[Node 11
-Fixed CH11]
-    NL[LEFT Directional
-Scan All]
-    NR[RIGHT Directional
-Scan All]
-    GPS[GPS + PPS Module]
+  %% Processing
+  subgraph Processing["Aggregator Layer"]
+    agg["SERVICES-SYSTEMD<br>• Reads serial frames<br>• Reads GPS NMEA + PPS<br>• Merges into records"]
   end
 
-  PWR --> PROBES
-
-  %% ==============================
-  %% USB HUB
-  %% ==============================
-  subgraph HUB[Powered USB Hub]
-    MUX[USB Multiplexer]
+  %% Storage
+  subgraph Storage["Data Storage"]
+    db["SQLite DB: wifi_captures"]
+    csv["Optional CSV Export"]
   end
 
-  PROBES --> MUX
+  %% Flow into processing and storage
+  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 & n57 & n71--> agg
+  agg --> db
+  agg --> csv
 
-  %% ==============================
-  %% RASPBERRY PI USB
-  %% ==============================
-  subgraph PI[Raspberry Pi 5]
-    USB[USB Bus]
-    ACM1[/ttyACM1/]
-    ACM2[/ttyACM2/]
-    ACM3[/ttyACM3/]
-    ACM4[/ttyACM4/]
-    ACM5[/ttyACM5/]
-    ACM6[/ttyACM6/]
-    ACM7[/ttyACM7/]
-    ACM8[/ttyACM8/]
-    ACM9[/ttyACM9/]
-    ACM10[/ttyACM10/]
-    ACM11[/ttyACM11/]
-    ACM12[/ttyACM12/]
-    UART[/dev/serial0/]
-    PPS[/dev/pps0/]
-  end
-
-  MUX --> USB
-
-  USB --> ACM1 & ACM2 & ACM3 & ACM4 & ACM5 & ACM6 & ACM7 & ACM8 & ACM9 & ACM10 & ACM11 & ACM12
-  GPS --> UART
-  GPS --> PPS
-
-  %% ==============================
-  %% SYSTEMD SERVICES
-  %% ==============================
-  subgraph SERVICES[systemd Services]
-    CAP[wifi_capture.service]
-    BRK[broker.service]
-    GPSD[gpsd.service]
-    GPSPPS[gps-pps.service]
-    DB[wifi-db.service]
-    MON[system_monitor.service]
-  end
-
-  ACM1 & ACM2 & ACM3 & ACM4 & ACM5 & ACM6 & ACM7 & ACM8 & ACM9 & ACM10 & ACM11 & ACM12 --> CAP
-  CAP --> BRK
-
-  UART --> GPSD
-  PPS --> GPSPPS
-  GPSD --> GPSPPS
-
-  BRK --> DB
-  GPSPPS --> DB
-
-  %% ==============================
-  %% CONTROL + STORAGE
-  %% ==============================
-  STATE[capture.state]
-  UI[HTML Dashboard]
-
-  UI --> STATE
-  STATE --> DB
-
-  subgraph STORAGE[Persistent Storage]
-    SQLITE[(trilateration_data.db)]
-    CSV[(CSV / GeoJSON Export)]
-  end
-
-  DB --> SQLITE
-  SQLITE --> CSV
-  MON --> UI
 ```
 
 **Key characteristics**:
