@@ -1,86 +1,53 @@
-# Wi‑Fi Multi‑Probe Mapper
+# Wi‑Fi High Speed Scanning Rig
 
-**(12× ESP32 XIAO + GPS/PPS, Centralized Time Authority)**
+**(ESP32 XIAO Array + GPS/PPS‑Disciplined Linux Host)**
 
-A reproducible system for **simultaneous 2.4 GHz Wi‑Fi management‑frame capture** across channels 1–12 using multiple ESP32 XIAO probes, with **GPS + PPS‑disciplined time authority on a Linux host**.
+A deterministic, reproducible system for **simultaneous 2.4 GHz Wi‑Fi management‑frame capture** using multiple ESP32 XIAO probes, with **all timing, positioning, and fusion performed centrally on a Linux host disciplined by GPS + PPS**.
 
-All Wi‑Fi frames are **timestamped centrally on the host** using a sub‑microsecond‑accurate PPS clock, fused with GPS position and motion data, stored in SQLite/CSV, and post‑processed into GeoJSON for spatial analysis.
+The system is designed for **mobile or stationary RF surveying**, directional inference, and later spatial analysis (GeoJSON / KML), while **explicitly avoiding distributed time synchronization** on microcontrollers.
 
-This architecture intentionally avoids distributed clock synchronization on microcontrollers and instead uses a **single Stratum‑1 time source**.
+This architecture mirrors professional **SDR, GNSS, and sensor‑fusion systems**.
 
 ---
 
-## Design Principles (Authoritative)
+## Core Principles (Non‑Negotiable)
 
-* **ESP32 nodes do not discipline time**
+* **ESP32 probes do not own time**
 
-  * They emit **monotonic microsecond timestamps only** (`esp_timer_get_time()`).
+  * They emit **monotonic microsecond counters only**
 * **Linux host is the sole time authority**
 
-  * GPS NMEA + PPS → chrony → kernel clock.
-* **All absolute timestamps are assigned centrally**
+  * PPS‑disciplined kernel clock
+  * GPS provides UTC + motion data
+* **All absolute timestamps are assigned on the host**
+* **Capture is UI‑controlled**
 
-  * Deterministic, monotonic, GPS‑traceable UTC.
-* **Scan alignment is logical, not clock‑based**
+  * No background capture unless explicitly started
+* **State is preserved**
 
-  * `sweep_id` and `sample_id` provide correlation windows.
-* **Directional inference is signal‑based**
+  * Last‑known‑good GPS fix is retained
+  * No resets on transient message loss
+* **Directional inference is advisory**
 
-  * LEFT/RIGHT probes compare RSSI per BSSID.
-
-This mirrors professional SDR, GNSS, and sensor‑fusion capture systems.
-
----
-
-## Capture Model
-
-Each Wi‑Fi capture record contains:
-
-### From ESP32
-
-* `node_id`
-* `esp_us` — monotonic microseconds since boot
-* `sweep_id` — scan epoch identifier
-* `sample_id` — per‑sweep sequence number
-* `channel`, `frequency_mhz`
-* `bssid`, `ssid`
-* `rssi_dbm`
-* `frame_type` (Beacon, Probe Req, Probe Resp)
-
-### From Host (authoritative)
-
-* `ts_utc` — PPS‑disciplined UTC timestamp
-* `gps_lat`, `gps_lon`, `gps_alt_m`
-* `gps_speed_mps`, `gps_track_deg`
-* `pps_locked` — PPS validity flag
-
-ESP timestamps are retained **only for ordering and latency analysis**.
+  * LEFT / RIGHT probes bias interpretation, not geometry
 
 ---
 
-## Repository Layout
+## Operational Overview
 
-```text
-wifi_promiscuous/
-├─ README.md
-├─ data/
-│  ├─ captures.sqlite
-│  ├─ captures_YYYYMMDD.csv
-│  └─ gps_raw.log
-├─ host/
-│  ├─ aggregator.py
-│  ├─ trilaterate_to_geojson.py
-│  ├─ requirements.txt
-│  ├─ config.yaml
-│  ├─ channel_map.yaml
-│  └─ schemas/
-│     └─ sqlite_schema.sql
-├─ scripts/
-│  └─ start.sh
-└─ firmware/
-   ├─ esp32_fixed_channel/
-   └─ esp32_directional_scan/
-```
+At runtime:
+
+1. ESP32 probes capture Wi‑Fi management frames
+2. Frames are streamed over USB as JSON
+3. Linux host:
+
+   * assigns PPS‑disciplined UTC timestamps
+   * fuses GPS position, speed, and heading
+   * stores observations in SQLite
+4. Optional post‑processing exports GeoJSON for mapping
+
+Capture **does not run by default**.
+It only runs when enabled from the HTML dashboard.
 
 ---
 
@@ -88,13 +55,14 @@ wifi_promiscuous/
 
 ```mermaid
 flowchart LR
-  ESP[ESP32 Probes<br/>Channels 1–12] -->|JSON over USB| AGG[Host Aggregator]
-  GPS[GPS NMEA] --> AGG
-  PPS[PPS GPIO] --> AGG
+    ESP[ESP32 Probes<br/>Ch 1–11 + LEFT/RIGHT] -->|USB JSON| HOST[Linux Host]
 
-  AGG -->|SQLite| DB[(captures.sqlite)]
-  AGG -->|CSV| CSV[(captures_YYYYMMDD.csv)]
-  DB --> GEO[GeoJSON Export]
+    GPS[GNSS NMEA] --> HOST
+    PPS[PPS GPIO] --> HOST
+
+    HOST --> DB[(trilateration_data.db)]
+    DB --> GEO[GeoJSON / KML]
+    HOST --> UI[HTML Dashboard]
 ```
 
 ---
@@ -104,193 +72,199 @@ flowchart LR
 ```mermaid
 flowchart TB
 
-  subgraph Probes[ESP32 XIAO Probes]
-    N1[Node 1<br/>Ch 1]
-    N2[Node 2<br/>Ch 2]
-    N3[Node 3<br/>Ch 3]
-    N4[Node 4<br/>Ch 4]
-    N5[Node 5<br/>Ch 5]
-    N6[Node 6<br/>Ch 6]
-    N7[Node 7<br/>Ch 7]
-    N8[Node 8<br/>Ch 8]
-    N9[Node 9<br/>Ch 9]
-    N10[Node 10<br/>Ch 10]
-    N11[Node 11<br/>Ch 11]
-    NL[LEFT Scan]
-    NR[RIGHT Scan]
-  end
+    subgraph ESP[ESP32 Probe Array]
+        N1[Node 1<br/>Ch 1]
+        N2[Node 2<br/>Ch 2]
+        N3[Node 3<br/>Ch 3]
+        N4[Node 4<br/>Ch 4]
+        N5[Node 5<br/>Ch 5]
+        N6[Node 6<br/>Ch 6]
+        N7[Node 7<br/>Ch 7]
+        N8[Node 8<br/>Ch 8]
+        N9[Node 9<br/>Ch 9]
+        N10[Node 10<br/>Ch 10]
+        N11[Node 11<br/>Ch 11]
+        L[LEFT Directional]
+        R[RIGHT Directional]
+    end
 
-  HUB[Powered USB Hub]
-  HOST[Linux Host<br/>PPS‑disciplined]
+    HUB[Powered USB Hub]
+    HOST[Linux Host]
 
-  Probes --> HUB --> HOST
+    ESP --> HUB --> HOST
 
-  subgraph HostStack[Host Time + Fusion]
-    PPSK[PPS Kernel Clock]
-    CHRONY[chrony]
-    GPSD[gpsd]
-    AGG2[aggregator.py]
-  end
+    subgraph Time[Time Authority]
+        PPSK[PPS Kernel Clock]
+        CHRONY[chrony]
+        GPSD[gpsd]
+    end
 
-  PPS --> PPSK --> CHRONY
-  GPS --> GPSD --> AGG2
-  HOST --> AGG2
+    PPS --> PPSK --> CHRONY
+    GPS --> GPSD --> HOST
 ```
 
 ---
 
-## Hardware
+## Capture Control Model
 
-* 13 × Seeed XIAO ESP32-S3
+The **database worker always runs**, but **ingestion is gated** by a shared state file.
 
-  * 11 fixed-channel probes (Ch 1–11)
-  * 2 directional probes (LEFT / RIGHT, full scan)
-* Directional antennas (180° opposed)
-* Powered USB hub
-* **REYAX RYS352A GPS/GNSS module**
+* `capture.state = STOP` → no database writes
+* `capture.state = START` → active ingestion
 
-  * NMEA over Raspberry Pi UART (`/dev/serial0`)
-  * PPS to GPIO for time discipline
-* Linux host (Raspberry Pi 4/5, Debian, Ubuntu)
+The HTML UI controls this state.
 
----
+This avoids:
 
-## Time Synchronization (Critical)
-
-The host operates as a **Stratum‑1 clock**:
-
-* PPS wired to GPIO (e.g., `dtoverlay=pps-gpio,gpiopin=18`)
-* `chrony` uses PPS for high-precision seconds
-* GPS NMEA provides coarse UTC date/time + navigation fields (lat/lon/alt/speed/track)
-* `gpsd` can parse NMEA from `/dev/serial0` (optional); the host can also parse NMEA directly in `aggregator.py`
-
-### Verification
-
-```bash
-# PPS edge present?
-sudo ppstest /dev/pps0
-
-# chrony locked to PPS?
-chronyc sources -v
-chronyc tracking
-```
-
-Expected accuracy: **<1 µs**
+* restarting services
+* corrupting WAL
+* losing in‑memory buffers
 
 ---
 
-## Configuration
+## Repository Layout (Actual)
 
-All runtime behavior is controlled by `host/config.yaml`.
-
-```yaml
-gps:
-  # RYS352A wired to Raspberry Pi UART
-  nmea_port: "/dev/serial0"
-  nmea_baud: 115200
-  use_pps: true
-  max_fix_age_ms: 500
-  raw_log_enable: true
-
-probes:
-  1: "/dev/serial/by-id/usb-Espressif_..."
-  2: "/dev/serial/by-id/usb-Espressif_..."
-  ...
-
-storage:
-  mode: "sqlite"
-  sqlite_path: "data/captures.sqlite"
-
-runtime:
-  queue_max: 10000
-  drop_on_backpressure: true
+```text
+wifi_promiscuous/
+├── data/
+│   ├── trilateration_data.db
+│   └── wifi.db                # legacy / optional
+│
+├── host/
+│   ├── wifi_capture_service.py
+│   ├── broker.py
+│   ├── db-worker.py           # main ingestion & fusion
+│   ├── gps_service.py         # GPS + PPS → gps.json
+│   ├── system_monitor.py
+│   └── schema/
+│       └── aggregator_schema.sql
+│
+├── tmp/
+│   ├── gps.json
+│   ├── capture.state
+│   ├── wifi_node_1.json
+│   ├── ...
+│   ├── wifi_node_11.json
+│   ├── wifi_node_LEFT.json
+│   └── wifi_node_RIGHT.json
+│
+├── scripts/
+│   ├── start.sh
+│   ├── stop.sh
+│   └── restart_stack.sh
+│
+└── /var/www/html/wifi/
+    ├── index.html
+    ├── db_ctl.php
+    ├── css/
+    │   └── dashboard.css
+    ├── js/
+    │   └── dashboard.js
+    └── data/ (symlinks to tmp/)
 ```
 
 ---
 
-## Storage Schema
+## Database Model (Operational)
 
-```sql
-CREATE TABLE wifi_captures (
-  id INTEGER PRIMARY KEY,
-  ts_utc TEXT NOT NULL,
-  node_id INTEGER NOT NULL,
-  sweep_id INTEGER,
-  sample_id INTEGER,
-  channel INTEGER,
-  frequency_mhz INTEGER,
-  bssid TEXT,
-  ssid TEXT,
-  rssi_dbm INTEGER,
-  gps_lat REAL,
-  gps_lon REAL,
-  gps_alt_m REAL,
-  gps_speed_mps REAL,
-  gps_track_deg REAL,
-  pps_locked INTEGER
-);
-```
+* **wifi_observations** – raw per‑probe observations (append‑only)
+* **side_observations** – LEFT / RIGHT burst comparisons
+* **wifi_captures** – per‑BSSID aggregated state
+* **resolved_locations** – optional derived estimates
 
 ---
 
-## Left / Right Directional Discriminator
-
-The LEFT and RIGHT directional probes scan all channels and do **not** participate in fixed-channel trilateration directly. Instead, they provide **side-of-path discrimination** by comparing RSSI per BSSID within the same sweep window.
-
-The discriminator operates entirely on the host and influences **weighting and labeling** during storage and later trilateration.
+## Directional LEFT / RIGHT Logic
 
 ```mermaid
 flowchart TD
+    A[Fixed‑Channel Observations] --> B[Aggregator]
+    L[LEFT Directional] --> B
+    R[RIGHT Directional] --> B
 
-  A[Wi-Fi Capture<br/>from Fixed Channel Nodes] --> B[Aggregator Ingest]
-  L[LEFT Directional Probe<br/>Full Scan] --> B
-  R[RIGHT Directional Probe<br/>Full Scan] --> B
+    B --> C[Group by BSSID + Time Window]
 
-  B --> C[Group by BSSID
-within Sweep Window]
+    C --> D{LEFT & RIGHT RSSI?}
 
-  C --> D{LEFT vs RIGHT
-RSSI Available?}
+    D -->|Yes| E[Compare RSSI]
+    D -->|No| F[Side Unknown]
 
-  D -->|Yes| E[Compare RSSI
-LEFT vs RIGHT]
-  D -->|No| F[Mark Side = Unknown]
+    E -->|LEFT > RIGHT + Δ| G[Side = LEFT]
+    E -->|RIGHT > LEFT + Δ| H[Side = RIGHT]
+    E -->|≈ Equal| I[Side = CENTER]
 
-  E -->|LEFT > RIGHT + Δ| G[Side = LEFT]
-  E -->|RIGHT > LEFT + Δ| H[Side = RIGHT]
-  E -->|≈ Equal| I[Side = CENTER / AMBIGUOUS]
+    G --> J[Annotate Capture]
+    H --> J
+    I --> J
+    F --> J
 
-  G --> J[Annotate Record
-side_hint=LEFT]
-  H --> J
-  I --> J
-  F --> J
-
-  J --> K[(SQLite / CSV Storage)]
-  K --> M[Trilateration / GeoJSON]
+    J --> DB[(wifi_captures)]
 ```
 
-**Notes**:
-
-* Δ (delta) is a configurable RSSI threshold to avoid noise-based flips.
-* Directional probes are advisory; fixed-channel probes remain authoritative for RF geometry.
-* `side_hint` is stored as metadata and used to bias or filter solutions.
+* Directional probes are advisory only
+* Δ avoids noise‑based flipping
 
 ---
 
-## Legal & RF Notice
+## GPS & Time Discipline
 
-Only IEEE 802.11 **management frames** are captured.
+* GPS NMEA via `/dev/serial0`
+* PPS via `/dev/pps0`
+* `chrony` disciplines the kernel clock
+* `gps_service.py` preserves last‑known‑good fixes
+
+Verified state:
+
+* PPS active
+* Mode = 3 (3D fix)
+* Valid lat / lon / alt (MSL)
+* Reliable timestamps
+
+---
+
+## Dependencies
+
+### System
+
+* Linux (Debian / Ubuntu)
+* gpsd
+* chrony
+* SQLite3
+* systemd
+* Apache + PHP
+
+### Python
+
+* Python ≥ 3.9
+* sqlite3
+* json
+* statistics
+* collections
+
+### Hardware
+
+* 11–13 × ESP32 XIAO
+* Directional antennas (LEFT / RIGHT)
+* Powered USB hub
+* GNSS module with PPS (REYAX RYS352A)
+* Raspberry Pi 4/5 or equivalent
+
+---
+
+## Legal / RF Notice
+
+Only **IEEE 802.11 management frames** are captured.
 No payloads, no decryption, no association.
 
-Use only where lawful.
+Operate only where lawful.
 
 ---
 
 ## Status
 
-✔ GPS‑locked
 ✔ PPS‑disciplined
-✔ Centralized timestamping
-✔ Deterministic fusion
-
+✔ Centralized time authority
+✔ Deterministic ingestion
+✔ UI‑controlled capture
+✔ Directional inference
+✔ Ready for spatial analysis
