@@ -1,70 +1,79 @@
-# Master device-to-role mapping for WiFi Promiscuous System
-# Location: /media/sbejarano/Developer1/wifi_promiscuous/host/devices.yaml
+# ============================================================
+# devices.yaml
+# Single source of truth for ALL serial devices
+# NO runtime discovery is allowed anywhere
+# ============================================================
 
+# ------------------------------------------------------------
+# GPS / TIME
+# ------------------------------------------------------------
 gps:
-  manufacturer: "u-blox AG - www.u-blox.com"
-  port: "/dev/ttyACM0"
+  uart: /dev/serial0
+  pps:  /dev/pps0
 
+# ------------------------------------------------------------
+# Directional scanners (fixed roles)
+# ------------------------------------------------------------
 directional:
   left:
-    mac: "B8:F8:62:FB:56:2C"
+    node_id: LEFT
+    port: /dev/esp-left
+    baud: 115200
+
   right:
-    mac: "B8:F8:62:FB:50:9C"
+    node_id: RIGHT
+    port: /dev/esp-right
+    baud: 115200
 
+# ------------------------------------------------------------
+# Fixed-channel scanners
+# ------------------------------------------------------------
 scanners:
-  - mac: "FC:01:2C:CB:BC:CC"
-    port: "/dev/ttyACM1"
-    node_id: 1
+  - node_id: 1
+    port: /dev/esp-node1
+    baud: 115200
 
-  - mac: "B8:F8:62:FA:0C:70"
-    port: "/dev/ttyACM10"
-    node_id: 2
+  - node_id: 2
+    port: /dev/esp-node2
+    baud: 115200
 
-  - mac: "B8:F8:62:FA:12:2C"
-    port: "/dev/ttyACM11"
-    node_id: 3
+  - node_id: 3
+    port: /dev/esp-node3
+    baud: 115200
 
-  - mac: "B8:F8:62:F6:D8:10"
-    port: "/dev/ttyACM12"
-    node_id: 4
+  - node_id: 4
+    port: /dev/esp-node4
+    baud: 115200
 
-  - mac: "B8:F8:62:F6:D7:AC"
-    port: "/dev/ttyACM13"
-    node_id: 5
+  - node_id: 5
+    port: /dev/esp-node5
+    baud: 115200
 
-  - mac: "B8:F8:62:FB:50:A8"
-    port: "/dev/ttyACM14"
-    node_id: 6
+  - node_id: 6
+    port: /dev/esp-node6
+    baud: 115200
 
-  - mac: "B8:F8:62:FB:50:9C"
-    port: "/dev/ttyACM2"
-    node_id: right  # override by directional
+  - node_id: 7
+    port: /dev/esp-node7
+    baud: 115200
 
-  - mac: "B8:F8:62:FB:56:2C"
-    port: "/dev/ttyACM3"
-    node_id: left   # override by directional
+  - node_id: 8
+    port: /dev/esp-node8
+    baud: 115200
 
-  - mac: "FC:01:2C:CB:BA:14"
-    port: "/dev/ttyACM4"
-    node_id: 7
+  - node_id: 9
+    port: /dev/esp-node9
+    baud: 115200
 
-  - mac: "B8:F8:62:FB:57:74"
-    port: "/dev/ttyACM5"
-    node_id: 8
+  - node_id: 10
+    port: /dev/esp-node10
+    baud: 115200
 
-  - mac: "B8:F8:62:FA:12:1C"
-    port: "/dev/ttyACM6"
-    node_id: 9
+  - node_id: 11
+    port: /dev/esp-node11
+    baud: 115200
 
-  - mac: "B8:F8:62:F6:D8:08"
-    port: "/dev/ttyACM7"
-    node_id: 10
-
-  - mac: "B8:F8:62:FB:4F:04"
-    port: "/dev/ttyACM8"
-    node_id: 11
-
-  - mac: "B8:F8:62:FB:5E:54"
-    port: "/dev/ttyACM9"
-    node_id: 12
+  - node_id: 12
+    port: /dev/esp-node12
+    baud: 115200
 
