@@ -210,18 +210,15 @@ This behavior is expected and explained by **GNSS acquisition physics and receiv
 
 ```mermaid
 flowchart TD
-    GNSS[GNSS Receiver]
-    UART[/dev/serial0
-NMEA]
-    PPS[/dev/pps0
-PPS]
+    GNSS["GNSS Receiver"]
 
-    gpsd[gpsd.service
-(Type=simple)]
-    chrony[chronyd]
+    UART["/dev/serial0<br/>NMEA"]
+    PPS["/dev/pps0<br/>PPS"]
 
-    apps[Consumers
-(gpspipe, python)]
+    gpsd["gpsd.service<br/>(Type=simple)"]
+    chrony["chronyd"]
+
+    apps["Consumers<br/>(gpspipe, python)"]
 
     GNSS --> UART --> gpsd --> apps
     GNSS --> PPS --> chrony
