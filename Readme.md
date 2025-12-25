@@ -20,9 +20,9 @@ This architecture mirrors professional **SDR, GNSS, and sensor‑fusion systems*
   * PPS‑disciplined kernel clock
   * GPS provides UTC + motion data
 * **All absolute timestamps are assigned on the host**
-* **Capture is UI‑controlled**
+* **Capture is state‑controlled**
 
-  * No background capture unless explicitly started
+  * No background capture unless explicitly enabled
 * **State is preserved**
 
   * Last‑known‑good GPS fix is retained
@@ -47,7 +47,7 @@ At runtime:
 4. Optional post‑processing exports GeoJSON for mapping
 
 Capture **does not run by default**.
-It only runs when enabled from the HTML dashboard.
+It runs only when enabled via the shared capture state.
 
 ---
 
@@ -112,7 +112,7 @@ The **database worker always runs**, but **ingestion is gated** by a shared stat
 * `capture.state = STOP` → no database writes
 * `capture.state = START` → active ingestion
 
-The HTML UI controls this state.
+The shared state file controls this state.
 
 This avoids:
 
@@ -209,6 +209,7 @@ flowchart TD
 ## Services & systemd Architecture
 
 The diagram below focuses **purely on hardware → USB → systemd services → storage**
+
 ```mermaid
 flowchart TD
  subgraph s1["USB HUB WITH POWER"]
@@ -232,7 +233,6 @@ flowchart TD
         n63["ttyACM11"]
         n64["ttyACM12"]
         n55["ttyACM13"]
-       
   end
     C["Node 1"] --> n1["Tune to CH1<br>802.11"]
     n1 --> n5["Capture:<br>BSSID<br>SSID<br>RSSI<br>CH#<br>Frequency"]
@@ -297,56 +297,6 @@ flowchart TD
     n70 --> n71
     n71 --> s2
     n41 -- GPS --> n55
-    n6@{ shape: rect}
-    n9@{ shape: rect}
-    n12@{ shape: rect}
-    n15@{ shape: rect}
-    n18@{ shape: rect}
-    n21@{ shape: rect}
-    n24@{ shape: rect}
-    n27@{ shape: rect}
-    n30@{ shape: rect}
-    n33@{ shape: rect}
-    n57@{ shape: rect}
-    n7@{ shape: rect}
-    n8@{ shape: rect}
-    n10@{ shape: rect}
-    n11@{ shape: rect}
-    n13@{ shape: rect}
-    n14@{ shape: rect}
-    n16@{ shape: rect}
-    n17@{ shape: rect}
-    n19@{ shape: rect}
-    n20@{ shape: rect}
-    n22@{ shape: rect}
-    n23@{ shape: rect}
-    n25@{ shape: rect}
-    n26@{ shape: rect}
-    n28@{ shape: rect}
-    n29@{ shape: rect}
-    n31@{ shape: rect}
-    n32@{ shape: rect}
-    n34@{ shape: rect}
-    n35@{ shape: rect}
-    n37@{ shape: rect}
-    n38@{ shape: rect}
-
-  %% Processing
-  subgraph Processing["Aggregator Layer"]
-    agg["SERVICES-SYSTEMD<br>• Reads serial frames<br>• Reads GPS NMEA + PPS<br>• Merges into records"]
-  end
-
-  %% Storage
-  subgraph Storage["Data Storage"]
-    db["SQLite DB: wifi_captures"]
-    csv["Optional CSV Export"]
-  end
-
-  %% Flow into processing and storage
-  n42 & n43 & n44 & n45 & n46 & n47 & n48 & n49 & n50 & n52 & n53 & n55 & n63 & n64 & n57 & n71--> agg
-  agg --> db
-  agg --> csv
-
 ```
 
 **Key characteristics**:
@@ -362,25 +312,25 @@ flowchart TD
 
 ## GPS & Time Discipline
 
-The system is composed of **long-running systemd services** that remain active at all times, with **runtime behavior gated by state files**, not service restarts.
+The system is composed of **long‑running systemd services** that remain active at all times, with **runtime behavior gated by state files**, not service restarts.
 
 This design avoids:
 
 * service churn
 * WAL corruption
-* loss of in-memory buffers
+* loss of in‑memory buffers
 * race conditions
 
 ### Service Responsibilities
 
-| Service                  | Purpose                                    |
-| ------------------------ | ------------------------------------------ |
-| `gpsd.service`           | Reads GNSS NMEA from `/dev/serial0`        |
-| `gps-pps.service`        | Generates `gps.json`, validates PPS & fix  |
-| `wifi_capture.service`   | Reads ESP32 USB JSON streams               |
-| `broker.service`         | Normalizes and fans out capture data       |
-| `wifi-db.service`        | Ingests, fuses, and stores data (UI-gated) |
-| `system_monitor.service` | Health & telemetry export                  |
+| Service                  | Purpose                                       |
+| ------------------------ | --------------------------------------------- |
+| `gpsd.service`           | Reads GNSS NMEA from `/dev/serial0`           |
+| `gps-pps.service`        | Generates `gps.json`, validates PPS & fix     |
+| `wifi_capture.service`   | Reads ESP32 USB JSON streams                  |
+| `broker.service`         | Normalizes and fans out capture data          |
+| `wifi-db.service`        | Ingests, fuses, and stores data (state‑gated) |
+| `system_monitor.service` | Health & telemetry export                     |
 
 ### Service Interaction Diagram
 
@@ -402,8 +352,6 @@ flowchart TB
     WIFICAP -->|USB JSON| BROKER
     BROKER -->|normalized JSON| DB
 
-    MON -->|status JSON| UI[HTML Dashboard]
-
     UI -->|START / STOP| STATE[capture.state]
     STATE --> DB
 ```
@@ -412,7 +360,6 @@ flowchart TB
 
 * Services remain running continuously
 * `wifi-db.service` checks `capture.state` before every ingest cycle
-* UI never restarts services
 * GPS remains authoritative even when capture is stopped
 
 ---
@@ -476,7 +423,5 @@ Operate only where lawful.
 ✔ PPS‑disciplined
 ✔ Centralized time authority
 ✔ Deterministic ingestion
-✔ UI‑controlled capture
 ✔ Directional inference
 ✔ Ready for spatial analysis
-
