@@ -228,22 +228,6 @@ PPS]
     gpsd --> chrony
 ```
 
-**ASCII fallback:**
-
-```
-GNSS Receiver
-   |            \
-   | NMEA         \ PPS
-   v               v
-/dev/serial0     /dev/pps0
-   |               |
-   v               v
-gpsd.service    chronyd
-   |
-   v
-Consumers
-```
-
 **Key properties:**
 
 * Single owner of UART (gpsd)
