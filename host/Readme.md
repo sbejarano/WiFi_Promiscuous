@@ -206,6 +206,8 @@ This behavior is expected and explained by **GNSS acquisition physics and receiv
 
 ## Working GPS + PPS Service Flow
 
+> **Note:** This document uses Mermaid diagrams. If your Markdown renderer does not support Mermaid, an ASCII fallback is provided below each diagram.
+
 ```mermaid
 flowchart TD
     GNSS[GNSS Receiver]
@@ -224,6 +226,22 @@ PPS]
     GNSS --> UART --> gpsd --> apps
     GNSS --> PPS --> chrony
     gpsd --> chrony
+```
+
+**ASCII fallback:**
+
+```
+GNSS Receiver
+   |            \
+   | NMEA         \ PPS
+   v               v
+/dev/serial0     /dev/pps0
+   |               |
+   v               v
+gpsd.service    chronyd
+   |
+   v
+Consumers
 ```
 
 **Key properties:**
@@ -284,6 +302,19 @@ logical mapping]
     yaml --> broker
 ```
 
+**ASCII fallback:**
+
+```
+ESP32 USB Devices
+        |
+      udev
+ (serial → name)
+        |
+    /dev/esp-*
+        |
+   broker.py <--- devices.yaml
+```
+
 **Result:**
 
 * No scanning
@@ -304,4 +335,3 @@ If control commands are required:
 3. Restart gpsd
 
 This is not a workaround — it is correct design.
-
