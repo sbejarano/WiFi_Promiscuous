@@ -6,7 +6,7 @@
 /* ===================== CONFIG ===================== */
 
 #define WIFI_CHANNEL        1        // Fixed per node
-#define NODE_ID             1        // Unique per ESP32 (1–12)
+#define NODE_ID             1        // Unique per ESP32 (1–12, LEFT/RIGHT mapped numerically)
 #define SERIAL_BAUD         115200
 #define SCAN_EPOCH_MS       1000     // 1-second logical scan window
 #define FILTER_BEACONS_ONLY false
@@ -37,6 +37,9 @@ QueueHandle_t packetQueue;
 static uint32_t scan_cycle = 0;
 static uint32_t sample_seq = 0;
 
+// WATCHDOG: advances ONLY when Wi-Fi packets are captured
+static uint32_t wd_seq = 0;
+
 // Non-blocking LED pulse control
 static volatile uint64_t led_on_until_us = 0;
 
@@ -62,9 +65,8 @@ void extractSSID(const uint8_t *payload, size_t len, char *ssid) {
     uint8_t tag_len = payload[pos + 1];
 
     if (tag == 0x00) {
-      if (tag_len == 0) {
-        strcpy(ssid, "hidden");
-      } else {
+      if (tag_len == 0) strcpy(ssid, "hidden");
+      else {
         size_t n = (tag_len < 32) ? tag_len : 32;
         memcpy(ssid, payload + pos + 2, n);
         ssid[n] = '\0';
@@ -73,18 +75,16 @@ void extractSSID(const uint8_t *payload, size_t len, char *ssid) {
     }
     pos += tag_len + 2;
   }
-
   strcpy(ssid, "hidden");
 }
 
 static inline void pulseUserLedNow(uint64_t now_us) {
-  // Turn LED on immediately, keep on for LED_PULSE_US after last packet
   digitalWrite(USER_LED_PIN, LED_ON_LEVEL);
   led_on_until_us = now_us + LED_PULSE_US;
 }
 
 static inline void serviceUserLed(uint64_t now_us) {
-  if (led_on_until_us != 0 && now_us >= led_on_until_us) {
+  if (led_on_until_us && now_us >= led_on_until_us) {
     digitalWrite(USER_LED_PIN, LED_OFF_LEVEL);
     led_on_until_us = 0;
   }
@@ -110,7 +110,6 @@ void wifi_sniffer(void *buf, wifi_promiscuous_pkt_type_t type) {
 
   memcpy(p.bssid, payload + 10, 6);
   strncpy(p.frame_type, getSubtypeName(subtype), sizeof(p.frame_type));
-
   extractSSID(payload + 36, pkt->rx_ctrl.sig_len - 36, p.ssid);
 
   xQueueSendFromISR(packetQueue, &p, NULL);
@@ -135,9 +134,9 @@ void wifiInitFixedChannel(uint8_t channel) {
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
   wifi_country_t country = {
-    .cc     = "US",
-    .schan  = 1,
-    .nchan  = 13,
+    .cc = "US",
+    .schan = 1,
+    .nchan = 13,
     .policy = WIFI_COUNTRY_POLICY_MANUAL
   };
   esp_wifi_set_country(&country);
@@ -167,25 +166,27 @@ void wifiTask(void *pvParameters) {
 }
 
 void serialTask(void *pvParameters) {
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<512> doc;
   wifi_packet_t pkt;
 
   while (true) {
-    // Service LED even when idle (keeps it non-blocking)
     serviceUserLed(esp_timer_get_time());
 
     if (xQueueReceive(packetQueue, &pkt, pdMS_TO_TICKS(50)) == pdTRUE) {
       const uint64_t now_us = pkt.esp_us;
 
-      // Blink LED on any captured packet presence
       pulseUserLedNow(now_us);
 
       sample_seq++;
+
+      // WATCHDOG: advance ONLY on actual Wi-Fi capture
+      wd_seq++;
 
       doc.clear();
       doc["node_id"]     = NODE_ID;
       doc["scan_cycle"]  = scan_cycle;
       doc["sample_seq"]  = sample_seq;
+      doc["wd_seq"]      = wd_seq;      // WATCHDOG FIELD
       doc["esp_us"]      = pkt.esp_us;
       doc["ssid"]        = pkt.ssid;
 
@@ -203,7 +204,6 @@ void serialTask(void *pvParameters) {
       serializeJson(doc, Serial);
       Serial.println();
 
-      // Keep LED timing accurate even with bursts
       serviceUserLed(esp_timer_get_time());
     }
   }
