@@ -10,6 +10,7 @@ There is **no direct hardware access** from the dashboard. The dashboard is a **
 
 ```mermaid
 flowchart TD
+
     subgraph Hardware
         GNSS[GNSS Receiver]
         ESP[ESP32 Nodes]
@@ -22,7 +23,7 @@ flowchart TD
         MON[system_monitor.service]
     end
 
-    subgraph State_Files[/tmp]
+    subgraph StateFiles
         GPSJ[gps.json]
         WIFIN[wifi_node_*.json]
         SYSJ[system.json]
@@ -79,28 +80,45 @@ If a value is wrong on the dashboard, the **bug is always upstream**.
 ## dashboard.js Read Cycle
 
 ```mermaid
-sequenceDiagram
-    participant JS as dashboard.js
-    participant HTTP as Web Server
-    participant FS as JSON Files
+flowchart TD
 
-    JS->>HTTP: GET /data/gps.json
-    HTTP->>FS: read gps.json
-    FS-->>HTTP: JSON
-    HTTP-->>JS: JSON
+    subgraph Hardware
+        GNSS[GNSS Receiver]
+        ESP[ESP32 Nodes]
+    end
 
-    JS->>HTTP: GET /data/system.json
-    HTTP->>FS: read system.json
-    FS-->>HTTP: JSON
-    HTTP-->>JS: JSON
+    subgraph Services
+        GPS[gps-pps.service]
+        WIFI[wifi_capture.service]
+        DB[wifi-db.service]
+        MON[system_monitor.service]
+    end
 
-    JS->>HTTP: GET /data/wifi_node_*.json
-    HTTP->>FS: read files
-    FS-->>HTTP: JSON
-    HTTP-->>JS: JSON
+    subgraph StateFiles
+        GPSJ[gps.json]
+        WIFIN[wifi_node_*.json]
+        SYSJ[system.json]
+        DBJ[db.json]
+    end
 
-    JS->>JS: compute status
-    JS->>JS: update DOM
+    subgraph Dashboard
+        JS[dashboard.js]
+        UI[Browser UI]
+    end
+
+    GNSS --> GPS --> GPSJ
+    ESP --> WIFI --> WIFIN
+    DB --> DBJ
+
+    GPSJ --> MON
+    WIFIN --> MON
+    DBJ --> MON
+
+    MON --> SYSJ
+
+    SYSJ --> JS --> UI
+    GPSJ --> JS
+    WIFIN --> JS
 ```
 
 ---
@@ -160,9 +178,45 @@ If GPS is stuck, the cause is always one of:
 That means:
 
 ```mermaid
-flowchart LR
-    udev -->|fixed symlinks| Services
-    Services -->|JSON only| Dashboard
+flowchart TD
+
+    subgraph Hardware
+        GNSS[GNSS Receiver]
+        ESP[ESP32 Nodes]
+    end
+
+    subgraph Services
+        GPS[gps-pps.service]
+        WIFI[wifi_capture.service]
+        DB[wifi-db.service]
+        MON[system_monitor.service]
+    end
+
+    subgraph StateFiles
+        GPSJ[gps.json]
+        WIFIN[wifi_node_*.json]
+        SYSJ[system.json]
+        DBJ[db.json]
+    end
+
+    subgraph Dashboard
+        JS[dashboard.js]
+        UI[Browser UI]
+    end
+
+    GNSS --> GPS --> GPSJ
+    ESP --> WIFI --> WIFIN
+    DB --> DBJ
+
+    GPSJ --> MON
+    WIFIN --> MON
+    DBJ --> MON
+
+    MON --> SYSJ
+
+    SYSJ --> JS --> UI
+    GPSJ --> JS
+    WIFIN --> JS
 ```
 
 The dashboard remains **unchanged**, regardless of how hardware is wired.
@@ -174,39 +228,6 @@ The dashboard remains **unchanged**, regardless of how hardware is wired.
 * dashboard.js is **read‑only**
 * all logic happens in services
 * JSON files are the contract
-
-```mermaid
-flowchart TD
-    gpsd[gpsd.service + gpsd.socket]
-    pps[gps-pps.service]
-    gpssvc[gps_service.py]
-    gpsjson[gps.json]
-
-    espwd[esp_usb_watchdog.service]
-    wificap[wifi-capture.service]
-    capjson[/dev/shm/wifi_capture.json]
-
-    trilat[trilateration.service]
-    triljson[trilaterated.json]
-
-    apwriter[ap_position_writer.service]
-    db[(SQLite DB\n(ap_locations))]
-
-    gpsd --> gpssvc
-    pps --> gpssvc
-    gpssvc --> gpsjson
-
-    espwd --> wificap
-    gpsjson --> wificap
-    wificap --> capjson
-
-    capjson --> trilat
-    trilat --> triljson
-
-    triljson --> apwriter
-    apwriter --> db
-```
-
 * if data is wrong → fix the writer, not the dashboard
 
 This separation is intentional and correct.
