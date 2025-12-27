@@ -1,0 +1,4 @@
+# denied-ssid.yaml, I travel with a couple APs that can feed data all the time to the high speed rig so I block the apture before hitting database or presentation.
+ssid:
+  - SHENTEL
+  - ACSO
