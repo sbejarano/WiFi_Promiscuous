@@ -1,31 +1,179 @@
+# Dashboard Data Flow (dashboard.js)
+
+This document explains **exactly** how `dashboard.js` reads, aggregates, and displays system data in the Wi‑Fi Promiscuous project.
+
+There is **no direct hardware access** from the dashboard. The dashboard is a **pure consumer** of JSON state files written by background services.
+
+---
+
+## High‑Level Architecture
+
 ```mermaid
 flowchart TD
-    gpsd[gpsd.service + gpsd.socket]
-    pps[gps-pps.service]
-    gpssvc[gps_service.py]
-    gpsjson[gps.json]
+    subgraph Hardware
+        GNSS[GNSS Receiver]
+        ESP[ESP32 Nodes]
+    end
 
-    espwd[esp_usb_watchdog.service]
-    wificap[wifi-capture.service]
-    capjson[/dev/shm/wifi_capture.json]
+    subgraph Services
+        GPS[gps-pps.service]
+        WIFI[wifi_capture.service]
+        DB[wifi-db.service]
+        MON[system_monitor.service]
+    end
 
-    trilat[trilateration.service]
-    triljson[trilaterated.json]
+    subgraph State_Files[/tmp]
+        GPSJ[gps.json]
+        WIFIN[wifi_node_*.json]
+        SYSJ[system.json]
+        DBJ[db.json]
+    end
 
-    apwriter[ap_position_writer.service]
-    db[(SQLite DB\n(ap_locations))]
+    subgraph Dashboard
+        JS[dashboard.js]
+        UI[Browser UI]
+    end
 
-    gpsd --> gpssvc
-    pps --> gpssvc
-    gpssvc --> gpsjson
+    GNSS --> GPS --> GPSJ
+    ESP --> WIFI --> WIFIN
+    DB --> DBJ
 
-    espwd --> wificap
-    gpsjson --> wificap
-    wificap --> capjson
+    GPSJ --> MON
+    WIFIN --> MON
+    DBJ --> MON
 
-    capjson --> trilat
-    trilat --> triljson
+    MON --> SYSJ
 
-    triljson --> apwriter
-    apwriter --> db
+    SYSJ --> JS --> UI
+    GPSJ --> JS
+    WIFIN --> JS
 ```
+
+---
+
+## Key Design Principle
+
+**dashboard.js never talks to services or devices.**
+
+It only performs:
+
+* `fetch()` over HTTP
+* reads pre‑generated JSON files
+* renders state already computed elsewhere
+
+If a value is wrong on the dashboard, the **bug is always upstream**.
+
+---
+
+## Files Read by dashboard.js
+
+| File               | Written By               | Purpose                          |
+| ------------------ | ------------------------ | -------------------------------- |
+| `gps.json`         | `gps-pps.service`        | GNSS fix, mode, PPS status, time |
+| `wifi_node_*.json` | `broker.service`         | Per‑ESP Wi‑Fi capture data       |
+| `system.json`      | `system_monitor.service` | CPU, disk, heartbeats, ports     |
+| `db.json`          | `wifi-db.service`        | DB throughput and queue depth    |
+
+---
+
+## dashboard.js Read Cycle
+
+```mermaid
+sequenceDiagram
+    participant JS as dashboard.js
+    participant HTTP as Web Server
+    participant FS as JSON Files
+
+    JS->>HTTP: GET /data/gps.json
+    HTTP->>FS: read gps.json
+    FS-->>HTTP: JSON
+    HTTP-->>JS: JSON
+
+    JS->>HTTP: GET /data/system.json
+    HTTP->>FS: read system.json
+    FS-->>HTTP: JSON
+    HTTP-->>JS: JSON
+
+    JS->>HTTP: GET /data/wifi_node_*.json
+    HTTP->>FS: read files
+    FS-->>HTTP: JSON
+    HTTP-->>JS: JSON
+
+    JS->>JS: compute status
+    JS->>JS: update DOM
+```
+
+---
+
+## Heartbeat Logic (Critical)
+
+The dashboard **does not infer liveness**.
+
+It trusts `system_monitor.service` to compute heartbeat ages.
+
+Example from `system.json`:
+
+```json
+{
+  "heartbeat": {
+    "GPS": 1766698123.12,
+    "PPS": 1766698123.12,
+    "1": 1766698122.88,
+    "LEFT": 1766698123.01
+  }
+}
+```
+
+`dashboard.js` simply does:
+
+* `now - heartbeat[key]`
+* color‑codes based on age thresholds
+
+---
+
+## Why dashboard.js Cannot Break GPS
+
+This is **provably impossible**:
+
+* dashboard.js runs in the browser
+* has no file write access
+* has no serial access
+* has no system calls
+
+If GPS is stuck, the cause is always one of:
+
+* gpsd / gps-pps.service
+* UART contention
+* GNSS configuration
+* antenna / RF
+
+---
+
+## Integration with udev + devices.yaml
+
+`devices.yaml` and udev rules ensure:
+
+* deterministic device naming
+* no serial probing
+* no race conditions
+
+That means:
+
+```mermaid
+flowchart LR
+    udev -->|fixed symlinks| Services
+    Services -->|JSON only| Dashboard
+```
+
+The dashboard remains **unchanged**, regardless of how hardware is wired.
+
+---
+
+## Summary
+
+* dashboard.js is **read‑only**
+* all logic happens in services
+* JSON files are the contract
+* if data is wrong → fix the writer, not the dashboard
+
+This separation is intentional and correct.
