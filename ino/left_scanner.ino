@@ -6,7 +6,7 @@
 
 #define NODE_NAME   "LEFT"        // "LEFT" or "RIGHT"
 #define SERIAL_BAUD 115200
-#define SCAN_DELAY  100            // ms between full sweeps
+#define SCAN_DELAY  100           // ms between full sweeps
 #define INCLUDE_HIDDEN false
 
 // ESP32-S3 Dev Module
@@ -36,6 +36,9 @@ static volatile uint16_t head = 0, tail = 0;
 static uint32_t sweep_counter  = 0;
 static uint32_t sample_counter = 0;
 
+// WATCHDOG: advances ONLY when Wi-Fi packets are captured
+static uint32_t wd_seq = 0;
+
 bool ringFull()  { return ((head + 1U) % RING_SIZE) == tail; }
 bool ringEmpty() { return head == tail; }
 
@@ -59,7 +62,6 @@ inline void ledSet(uint8_t r, uint8_t g, uint8_t b) {
   led.show();
 }
 
-// brief non-blocking pulse
 void ledPulseGreen() {
   ledSet(0, 40, 0);
   delay(30);
@@ -116,6 +118,9 @@ void wifiTask(void *pv) {
                "%s", WiFi.BSSIDstr(i).c_str());
 
       ringPush(rec);
+
+      // WATCHDOG ADVANCES ONLY ON REAL CAPTURE
+      wd_seq++;
     }
 
     WiFi.scanDelete();
@@ -126,7 +131,7 @@ void wifiTask(void *pv) {
 }
 
 /* ==================================================== */
-/* TASK: Serial output (Core 1)                          */
+/* TASK: Serial output (Core 1)                         */
 /* ==================================================== */
 void serialTask(void *pv) {
 
@@ -139,18 +144,22 @@ void serialTask(void *pv) {
     ScanRec rec;
     if (ringPop(rec)) {
       Serial.printf(
-        "{\"node\":\"%s\","
+        "{"
+        "\"node\":\"%s\","
         "\"esp_us\":%llu,"
         "\"sweep\":%lu,"
         "\"sample\":%lu,"
+        "\"wd_seq\":%lu,"
         "\"ch\":%d,"
         "\"rssi\":%d,"
         "\"bssid\":\"%s\","
-        "\"ssid\":\"%s\"}\n",
+        "\"ssid\":\"%s\""
+        "}\n",
         NODE_NAME,
         rec.esp_us,
         rec.sweep_id,
         rec.sample_id,
+        wd_seq,
         rec.ch,
         rec.rssi,
         rec.bssid,
@@ -166,7 +175,7 @@ void serialTask(void *pv) {
 void setup() {
 
   Serial.begin(SERIAL_BAUD);
-  while (!Serial) {}   // <<< ONLY ADDITION — REQUIRED FOR ESP32-S3 CDC
+  while (!Serial) {}
 
   led.begin();
   led.clear();
