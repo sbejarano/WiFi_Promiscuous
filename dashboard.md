@@ -6,48 +6,62 @@ There is **no direct hardware access** from the dashboard. The dashboard is a **
 
 ---
 
-## High‑Level Architecture
+## High‑Level Architecture (Current)
 
 ```mermaid
 flowchart TD
 
     subgraph Hardware
-        GNSS[GNSS Receiver]
-        ESP[ESP32 Nodes]
+        GNSS["GNSS Receiver"]
+        ESP["ESP32 Nodes"]
     end
 
     subgraph Services
-        GPS[gps-pps.service]
-        WIFI[wifi_capture.service]
-        DB[wifi-db.service]
-        MON[system_monitor.service]
+        GPSD["gpsd.service"]
+        PPS["gps-pps.service"]
+        GPSSVC["gps_service.py"]
+        CAP["wifi-capture.service"]
+        TRI["trilateration.service"]
+        DBW["ap_position_writer.service"]
+        MON["system_monitor.service"]
     end
 
     subgraph StateFiles
-        GPSJ[gps.json]
-        WIFIN[wifi_node_*.json]
-        SYSJ[system.json]
-        DBJ[db.json]
+        GPSJ["gps.json"]
+        CAPJ["/dev/shm/wifi_capture.json"]
+        TRIJ["trilaterated.json"]
+        SYSJ["system.json"]
     end
 
     subgraph Dashboard
-        JS[dashboard.js]
-        UI[Browser UI]
+        JS["dashboard.js"]
+        UI["Browser UI"]
     end
 
-    GNSS --> GPS --> GPSJ
-    ESP --> WIFI --> WIFIN
-    DB --> DBJ
+    GNSS --> GPSD
+    PPS --> GPSSVC
+    GPSD --> GPSSVC
+    GPSSVC --> GPSJ
+
+    ESP --> CAP
+    GPSJ --> CAP
+    CAP --> CAPJ
+
+    CAPJ --> TRI
+    TRI --> TRIJ
+
+    TRIJ --> DBW
 
     GPSJ --> MON
-    WIFIN --> MON
-    DBJ --> MON
-
+    CAPJ --> MON
+    TRIJ --> MON
     MON --> SYSJ
 
-    SYSJ --> JS --> UI
     GPSJ --> JS
-    WIFIN --> JS
+    CAPJ --> JS
+    TRIJ --> JS
+    SYSJ --> JS
+    JS --> UI
 ```
 
 ---
@@ -66,14 +80,14 @@ If a value is wrong on the dashboard, the **bug is always upstream**.
 
 ---
 
-## Files Read by dashboard.js
+## Files Read by dashboard.js (Current)
 
-| File               | Written By               | Purpose                          |
-| ------------------ | ------------------------ | -------------------------------- |
-| `gps.json`         | `gps-pps.service`        | GNSS fix, mode, PPS status, time |
-| `wifi_node_*.json` | `broker.service`         | Per‑ESP Wi‑Fi capture data       |
-| `system.json`      | `system_monitor.service` | CPU, disk, heartbeats, ports     |
-| `db.json`          | `wifi-db.service`        | DB throughput and queue depth    |
+| File                         | Written By               | Purpose                                        |
+| ---------------------------- | ------------------------ | ---------------------------------------------- |
+| `gps.json`                   | `gps_service.py`         | GNSS fix, PPS status, speed, bearing           |
+| `/dev/shm/wifi_capture.json` | `wifi-capture.service`   | Raw per‑node Wi‑Fi observations + GPS snapshot |
+| `trilaterated.json`          | `trilateration.service`  | Side, confidence, offset geometry              |
+| `system.json`                | `system_monitor.service` | CPU, disk, heartbeats, ports                   |
 
 ---
 
@@ -82,43 +96,17 @@ If a value is wrong on the dashboard, the **bug is always upstream**.
 ```mermaid
 flowchart TD
 
-    subgraph Hardware
-        GNSS[GNSS Receiver]
-        ESP[ESP32 Nodes]
-    end
+    GPSSVC["gps_service.py"] --> GPSJ["gps.json"]
+    CAP["wifi-capture.service"] --> CAPJ["/dev/shm/wifi_capture.json"]
+    TRI["trilateration.service"] --> TRIJ["trilaterated.json"]
+    MON["system_monitor.service"] --> SYSJ["system.json"]
 
-    subgraph Services
-        GPS[gps-pps.service]
-        WIFI[wifi_capture.service]
-        DB[wifi-db.service]
-        MON[system_monitor.service]
-    end
+    GPSJ --> JS["dashboard.js"]
+    CAPJ --> JS
+    TRIJ --> JS
+    SYSJ --> JS
 
-    subgraph StateFiles
-        GPSJ[gps.json]
-        WIFIN[wifi_node_*.json]
-        SYSJ[system.json]
-        DBJ[db.json]
-    end
-
-    subgraph Dashboard
-        JS[dashboard.js]
-        UI[Browser UI]
-    end
-
-    GNSS --> GPS --> GPSJ
-    ESP --> WIFI --> WIFIN
-    DB --> DBJ
-
-    GPSJ --> MON
-    WIFIN --> MON
-    DBJ --> MON
-
-    MON --> SYSJ
-
-    SYSJ --> JS --> UI
-    GPSJ --> JS
-    WIFIN --> JS
+    JS --> UI["Browser UI"]
 ```
 
 ---
@@ -136,7 +124,7 @@ Example from `system.json`:
   "heartbeat": {
     "GPS": 1766698123.12,
     "PPS": 1766698123.12,
-    "1": 1766698122.88,
+    "wifi-capture": 1766698122.88,
     "LEFT": 1766698123.01
   }
 }
@@ -158,9 +146,9 @@ This is **provably impossible**:
 * has no serial access
 * has no system calls
 
-If GPS is stuck, the cause is always one of:
+If GPS is stuck, the cause is always upstream:
 
-* gpsd / gps-pps.service
+* gpsd / gps‑pps / gps_service
 * UART contention
 * GNSS configuration
 * antenna / RF
@@ -175,50 +163,6 @@ If GPS is stuck, the cause is always one of:
 * no serial probing
 * no race conditions
 
-That means:
-
-```mermaid
-flowchart TD
-
-    subgraph Hardware
-        GNSS[GNSS Receiver]
-        ESP[ESP32 Nodes]
-    end
-
-    subgraph Services
-        GPS[gps-pps.service]
-        WIFI[wifi_capture.service]
-        DB[wifi-db.service]
-        MON[system_monitor.service]
-    end
-
-    subgraph StateFiles
-        GPSJ[gps.json]
-        WIFIN[wifi_node_*.json]
-        SYSJ[system.json]
-        DBJ[db.json]
-    end
-
-    subgraph Dashboard
-        JS[dashboard.js]
-        UI[Browser UI]
-    end
-
-    GNSS --> GPS --> GPSJ
-    ESP --> WIFI --> WIFIN
-    DB --> DBJ
-
-    GPSJ --> MON
-    WIFIN --> MON
-    DBJ --> MON
-
-    MON --> SYSJ
-
-    SYSJ --> JS --> UI
-    GPSJ --> JS
-    WIFIN --> JS
-```
-
 The dashboard remains **unchanged**, regardless of how hardware is wired.
 
 ---
@@ -229,5 +173,3 @@ The dashboard remains **unchanged**, regardless of how hardware is wired.
 * all logic happens in services
 * JSON files are the contract
 * if data is wrong → fix the writer, not the dashboard
-
-This separation is intentional and correct.
