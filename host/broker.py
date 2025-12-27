@@ -1,123 +1,127 @@
+# broker.py  (optional live view; NO DB; no split files)
 #!/usr/bin/env python3
 import os
 import json
 import time
-import threading
-import serial
 import yaml
-from datetime import datetime
+from collections import defaultdict, deque
 
-# ============================================================
-# PATHS / CONSTANTS
-# ============================================================
-BASE_DIR = "/media/sbejarano/Developer1/wifi_promiscuous"
-TMP_DIR  = f"{BASE_DIR}/tmp"
-CFG_FILE = f"{BASE_DIR}/host/devices.yaml"
-LOG_FILE = f"{TMP_DIR}/broker.log"
-BAUD_DEFAULT = 115200
+BASE = "/media/sbejarano/Developer1/wifi_promiscuous"
+INP  = "/dev/shm/wifi_capture.json"
 
-os.makedirs(TMP_DIR, exist_ok=True)
+OUT  = f"{BASE}/tmp/wifi_devices.json"
+DENY = f"{BASE}/host/denied_ssid.yaml"
 
-# ============================================================
-# LOGGING
-# ============================================================
-def log(msg):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a") as f:
-        f.write(f"[{ts}] {msg}\n")
+STALE_SEC = 3.0
+WINDOW_SEC = 2.0
 
-# ============================================================
-# ATOMIC JSON WRITE
-# ============================================================
-def atomic_write(path, obj):
+def atomic_write_json(path, obj):
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
-        json.dump(obj, f)
+        json.dump(obj, f, separators=(",", ":"))
     os.replace(tmp, path)
 
-# ============================================================
-# LOAD DEVICES (NO DISCOVERY)
-# ============================================================
-with open(CFG_FILE) as f:
-    CONF = yaml.safe_load(f) or {}
+def load_denied():
+    try:
+        with open(DENY) as f:
+            d = yaml.safe_load(f) or {}
+            return set(d.get("deny", []) or [])
+    except Exception:
+        return set()
 
-PORTS = []
+def read_capture():
+    try:
+        with open(INP) as f:
+            return json.load(f)
+    except Exception:
+        return None
 
-# Directional
-directional = CONF.get("directional", {})
-for side in ("left", "right"):
-    d = directional.get(side)
-    if d:
-        PORTS.append({
-            "node": d.get("node_id"),
-            "port": d.get("port"),
-            "baud": d.get("baud", BAUD_DEFAULT)
-        })
+def is_hidden(ssid: str) -> bool:
+    if not ssid:
+        return True
+    s = ssid.strip().lower()
+    return s in ("hidden", "<hidden>", "<length: 0>", "null")
 
-# Fixed scanners
-for s in CONF.get("scanners", []):
-    PORTS.append({
-        "node": str(s.get("node_id")),
-        "port": s.get("port"),
-        "baud": s.get("baud", BAUD_DEFAULT)
-    })
+def main():
+    denied = load_denied()
 
-# ============================================================
-# CAPTURE THREAD
-# ============================================================
-def capture(node_id, device, baud):
-    out_file = f"{TMP_DIR}/wifi_node_{node_id}.json"
+    # history per BSSID of (ts, node, rssi, channel, ssid)
+    hist = defaultdict(lambda: deque())
 
     while True:
-        try:
-            ser = serial.Serial(device, baud, timeout=0.2)
-            log(f"{node_id}: opened {device}")
-        except Exception as e:
-            log(f"{node_id}: open failed {device} ({e})")
-            time.sleep(2)
-            continue
+        cap = read_capture()
+        now = time.time()
 
-        while True:
-            try:
-                raw = ser.readline().decode(errors="ignore").strip()
-                if not raw.startswith("{"):
+        if cap and isinstance(cap.get("observations"), list):
+            for o in cap["observations"]:
+                try:
+                    ts = float(o.get("ts", now))
+                    bssid = (o.get("bssid") or "").strip()
+                    ssid  = (o.get("ssid") or "").strip()
+                    node  = (o.get("node") or "").strip().upper()
+                    rssi  = o.get("rssi", None)
+                    ch    = o.get("channel", None)
+
+                    if not bssid or rssi is None:
+                        continue
+                    if is_hidden(ssid):
+                        continue
+                    if ssid in denied:
+                        continue
+
+                    dq = hist[bssid]
+                    dq.append((ts, node, int(rssi), ch, ssid))
+                except Exception:
                     continue
 
-                pkt = json.loads(raw)
-                pkt["_node"] = node_id
-                pkt["_ts"] = time.time()
+        # prune old samples + build live view
+        devices = []
+        for bssid, dq in list(hist.items()):
+            # prune by window
+            while dq and (now - dq[0][0]) > WINDOW_SEC:
+                dq.popleft()
 
-                atomic_write(out_file, pkt)
+            if not dq:
+                hist.pop(bssid, None)
+                continue
 
-            except Exception as e:
-                log(f"{node_id}: read error ({e})")
-                break
+            last_ts, _, _, _, _ = dq[-1]
+            if (now - last_ts) > STALE_SEC:
+                hist.pop(bssid, None)
+                continue
 
-        try:
-            ser.close()
-        except Exception:
-            pass
+            # pick latest ssid / channel
+            ssid = dq[-1][4]
+            ch = dq[-1][3]
 
-        time.sleep(1)
+            # compute smoothed rssi (simple mean)
+            rssi_vals = [x[2] for x in dq if isinstance(x[2], int)]
+            rssi = int(sum(rssi_vals) / max(len(rssi_vals), 1)) if rssi_vals else None
 
-# ============================================================
-# MAIN
-# ============================================================
-def main():
-    log("Broker starting (NO SERIAL DISCOVERY)")
+            # side decision based on latest LEFT/RIGHT samples in window
+            left = [x[2] for x in dq if x[1] == "LEFT"]
+            right = [x[2] for x in dq if x[1] == "RIGHT"]
 
-    for p in PORTS:
-        if not p["node"] or not p["port"]:
-            continue
+            if left and right:
+                side = "LEFT" if (sum(left)/len(left)) > (sum(right)/len(right)) else "RIGHT"
+            elif left:
+                side = "LEFT"
+            elif right:
+                side = "RIGHT"
+            else:
+                side = "OMNI"
 
-        threading.Thread(
-            target=capture,
-            args=(p["node"], p["port"], p["baud"]),
-            daemon=True
-        ).start()
+            devices.append({
+                "bssid": bssid,
+                "ssid": ssid,
+                "rssi": rssi,
+                "channel": ch,
+                "side": side,
+                "last_seen": last_ts
+            })
 
-    while True:
-        time.sleep(1)
+        atomic_write_json(OUT, {"ts": now, "devices": devices})
+        time.sleep(0.25)
 
 if __name__ == "__main__":
     main()
