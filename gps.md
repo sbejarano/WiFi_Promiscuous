@@ -2,11 +2,11 @@
 flowchart TD
     gpsd["gpsd.service + gpsd.socket"]
     pps["gps-pps.service"]
-    gpssvc["gps_service.py"]
+    gpssvc["gps_services.py"]
     gpsjson["gps.json"]
 
     espwd["esp_usb_watchdog.service"]
-    wificap["wifi-capture.service"]
+    wificap["wifi_capture.service"]
     capjson["/dev/shm/wifi_capture.json"]
 
     trilat["trilateration.service"]

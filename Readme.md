@@ -46,8 +46,12 @@ At runtime:
    * stores observations in SQLite
 4. Optional post‑processing exports GeoJSON for mapping
 
-Capture **does not run by default**.
-It runs only when enabled via the shared capture state.
+Capture services are started by systemd at boot, but database ingestion is still
+state-gated. In practice:
+
+* services stay alive for deterministic readiness and buffering
+* `capture.state = STOP` keeps ingestion disabled
+* `capture.state = START` enables active ingestion
 
 ---
 
@@ -133,11 +137,13 @@ wifi_promiscuous/
 ├── host/
 │   ├── wifi_capture_service.py
 │   ├── broker.py
-│   ├── db-worker.py           # main ingestion & fusion
-│   ├── gps_service.py         # GPS + PPS → gps.json
+│   ├── trilateration_service.py
+│   ├── ap_position_writer.py
+│   ├── gps_services.py
+│   ├── esp_usb_watchdog.py
 │   ├── system_monitor.py
-│   └── schema/
-│       └── aggregator_schema.sql
+│   └── schemas/
+│       └── sqlite_schemas.sql
 │
 ├── tmp/
 │   ├── gps.json
