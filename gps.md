@@ -2,7 +2,7 @@
 flowchart TD
     gpsd["gpsd.service"]
     pps["gps-pps.service"]
-    gpssvc["gps_services.py"]
+    gpssvc["gps_service.py (deployment)"]
     gpsjson["gps.json"]
 
     espwd["esp_usb_watchdog.service"]

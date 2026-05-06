@@ -172,18 +172,30 @@ wifi_promiscuous/
 
 ## Runtime Layout on Raspberry Pi (Deployment)
 
-Typical deployed layout on the Pi host is intentionally minimal:
+Typical deployed layout on the Pi host is intentionally minimal at repo root:
 
 ```text
 ~/wifi_promiscuous/
-├── data/
+├── data/                  # trilateration_data.db (+ WAL/SHM)
 ├── host/
-├── tmp/
+├── tmp/                   # gps.json, trilaterated.json, watchdog/system/power state
 └── requirements.txt
 ```
 
-The service stack runs from `host/`, while runtime state and outputs are written
-under `tmp/` and `data/`.
+Observed deployment host scripts can differ slightly from development naming.
+For example, production currently uses `host/gps_service.py` (singular) and also
+includes operational helpers such as `power.py` and `ap_position_geojson.py`.
+
+Web assets are deployed at:
+
+```text
+/var/www/html/
+├── index.html
+├── db_ctl.php
+├── css/
+├── js/
+└── data/
+```
 
 ---
 
