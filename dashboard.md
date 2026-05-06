@@ -20,7 +20,7 @@ flowchart TD
         GPSD["gpsd.service"]
         PPS["gps-pps.service"]
         GPSSVC["gps_service.py"]
-        CAP["wifi-capture.service"]
+        CAP["wifi_capture.service"]
         TRI["trilateration.service"]
         DBW["ap_position_writer.service"]
         MON["system_monitor.service"]
@@ -28,7 +28,7 @@ flowchart TD
 
     subgraph StateFiles
         GPSJ["gps.json"]
-        CAPJ["/dev/shm/wifi_capture.json"]
+        CAPJ["tmp/wifi_node_*.json + tmp/wifi_devices.json"]
         TRIJ["trilaterated.json"]
         SYSJ["system.json"]
     end
@@ -85,7 +85,9 @@ If a value is wrong on the dashboard, the **bug is always upstream**.
 | File                         | Written By               | Purpose                                        |
 | ---------------------------- | ------------------------ | ---------------------------------------------- |
 | `gps.json`                   | `gps_service.py`         | GNSS fix, PPS status, speed, bearing           |
-| `/dev/shm/wifi_capture.json` | `wifi-capture.service`   | Raw per‑node Wi‑Fi observations + GPS snapshot |
+| `wifi_node_1..12.json`       | `wifi_capture.service`   | Per-node omni observations (12 XIAO scanners)  |
+| `wifi_node_LEFT/RIGHT.json`  | `wifi_capture.service`   | Directional discriminator observations          |
+| `wifi_devices.json`          | `wifi_capture.service`   | Combined device view consumed by dashboard      |
 | `trilaterated.json`          | `trilateration.service`  | Side, confidence, offset geometry              |
 | `system.json`                | `system_monitor.service` | CPU, disk, heartbeats, ports                   |
 
@@ -97,7 +99,7 @@ If a value is wrong on the dashboard, the **bug is always upstream**.
 flowchart TD
 
     GPSSVC["gps_service.py"] --> GPSJ["gps.json"]
-    CAP["wifi-capture.service"] --> CAPJ["/dev/shm/wifi_capture.json"]
+    CAP["wifi_capture.service"] --> CAPJ["wifi_node_*.json + wifi_devices.json"]
     TRI["trilateration.service"] --> TRIJ["trilaterated.json"]
     MON["system_monitor.service"] --> SYSJ["system.json"]
 
@@ -171,5 +173,5 @@ The dashboard remains **unchanged**, regardless of how hardware is wired.
 
 * dashboard.js is **read‑only**
 * all logic happens in services
-* JSON files are the contract
+* JSON files are the contract (`gps.json`, `system.json`, `wifi_node_*.json`, `wifi_devices.json`)
 * if data is wrong → fix the writer, not the dashboard

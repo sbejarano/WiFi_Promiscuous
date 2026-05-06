@@ -1,4 +1,3 @@
-sbejarano@raspberry-01:/var/www/html/wifi/js $ cat dashboard.js
 /*  WiFi Promiscuous Dashboard – 70 mph trilateration eye
  *  Reads the JSON keys your Python service produces:
  *   _node, _ts, sweep, sample, etc.
