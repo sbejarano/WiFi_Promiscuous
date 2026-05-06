@@ -1,6 +1,6 @@
 ```mermaid
 flowchart TD
-    gpsd["gpsd.service + gpsd.socket"]
+    gpsd["gpsd.service"]
     pps["gps-pps.service"]
     gpssvc["gps_services.py"]
     gpsjson["gps.json"]

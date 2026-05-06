@@ -126,7 +126,7 @@ This avoids:
 
 ---
 
-## Repository Layout (Actual)
+## Repository Layout (Development Repo)
 
 ```text
 wifi_promiscuous/
@@ -156,18 +156,34 @@ wifi_promiscuous/
 │
 ├── scripts/
 │   ├── start.sh
-│   ├── stop.sh
-│   └── restart_stack.sh
+│   └── stop.sh
 │
-└── /var/www/html/wifi/
+└── html/
     ├── index.html
     ├── db_ctl.php
     ├── css/
     │   └── dashboard.css
     ├── js/
     │   └── dashboard.js
-    └── data/ (symlinks to tmp/)
+    └── data/
 ```
+
+---
+
+## Runtime Layout on Raspberry Pi (Deployment)
+
+Typical deployed layout on the Pi host is intentionally minimal:
+
+```text
+~/wifi_promiscuous/
+├── data/
+├── host/
+├── tmp/
+└── requirements.txt
+```
+
+The service stack runs from `host/`, while runtime state and outputs are written
+under `tmp/` and `data/`.
 
 ---
 
