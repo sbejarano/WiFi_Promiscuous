@@ -1,12 +1,12 @@
 ```mermaid
 flowchart TD
-    gpsd["gpsd.service + gpsd.socket"]
+    gpsd["gpsd.service"]
     pps["gps-pps.service"]
-    gpssvc["gps_service.py"]
+    gpssvc["gps_service.py (deployment)"]
     gpsjson["gps.json"]
 
     espwd["esp_usb_watchdog.service"]
-    wificap["wifi-capture.service"]
+    wificap["wifi_capture.service"]
     capjson["/dev/shm/wifi_capture.json"]
 
     trilat["trilateration.service"]

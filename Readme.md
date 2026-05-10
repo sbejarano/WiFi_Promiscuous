@@ -46,8 +46,12 @@ At runtime:
    * stores observations in SQLite
 4. Optional post‑processing exports GeoJSON for mapping
 
-Capture **does not run by default**.
-It runs only when enabled via the shared capture state.
+Capture services are started by systemd at boot, but database ingestion is still
+state-gated. In practice:
+
+* services stay alive for deterministic readiness and buffering
+* `capture.state = STOP` keeps ingestion disabled
+* `capture.state = START` enables active ingestion
 
 ---
 
@@ -122,7 +126,7 @@ This avoids:
 
 ---
 
-## Repository Layout (Actual)
+## Repository Layout (Development Repo)
 
 ```text
 wifi_promiscuous/
@@ -133,11 +137,13 @@ wifi_promiscuous/
 ├── host/
 │   ├── wifi_capture_service.py
 │   ├── broker.py
-│   ├── db-worker.py           # main ingestion & fusion
-│   ├── gps_service.py         # GPS + PPS → gps.json
+│   ├── trilateration_service.py
+│   ├── ap_position_writer.py
+│   ├── gps_services.py
+│   ├── esp_usb_watchdog.py
 │   ├── system_monitor.py
-│   └── schema/
-│       └── aggregator_schema.sql
+│   └── schemas/
+│       └── sqlite_schemas.sql
 │
 ├── tmp/
 │   ├── gps.json
@@ -150,17 +156,45 @@ wifi_promiscuous/
 │
 ├── scripts/
 │   ├── start.sh
-│   ├── stop.sh
-│   └── restart_stack.sh
+│   └── stop.sh
 │
-└── /var/www/html/wifi/
+└── html/
     ├── index.html
     ├── db_ctl.php
     ├── css/
     │   └── dashboard.css
     ├── js/
     │   └── dashboard.js
-    └── data/ (symlinks to tmp/)
+    └── data/
+```
+
+---
+
+## Runtime Layout on Raspberry Pi (Deployment)
+
+Typical deployed layout on the Pi host is intentionally minimal at repo root:
+
+```text
+~/wifi_promiscuous/
+├── data/                  # trilateration_data.db (+ WAL/SHM)
+├── host/
+├── tmp/                   # gps.json, trilaterated.json, watchdog/system/power state
+└── requirements.txt
+```
+
+Observed deployment host scripts can differ slightly from development naming.
+For example, production currently uses `host/gps_service.py` (singular) and also
+includes operational helpers such as `power.py` and `ap_position_geojson.py`.
+
+Web assets are deployed at:
+
+```text
+/var/www/html/
+├── index.html
+├── db_ctl.php
+├── css/
+├── js/
+└── data/
 ```
 
 ---
