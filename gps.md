@@ -1,31 +1,38 @@
 ```mermaid
 flowchart TD
-    gpsd["gpsd.service + gpsd.socket"]
-    pps["gps-pps.service"]
+
+    gpsinit["ESP32 GPS Initialization"]
     gpssvc["gps_service.py"]
-    gpsjson["gps.json"]
+    gpsjson["tmp/gps.json"]
 
     espwd["esp_usb_watchdog.service"]
-    wificap["wifi-capture.service"]
+    wificap["wifi_capture_service.py"]
     capjson["/dev/shm/wifi_capture.json"]
 
-    trilat["trilateration.service"]
-    triljson["trilaterated.json"]
+    dbwriter["db_writer.py"]
+    ingestdb["Rotating Ingestion DBs<br/>trilateration_data_YYYYMMDD_HHMMSS.db"]
 
-    apwriter["ap_position_writer.service"]
-    db["SQLite DB (ap_locations)"]
+    batch["trilateration_batch.py"]
+    apdb["ap_trilateration_YYYYMMDD.db"]
+    geojson["ap_trilateration_YYYYMMDD.geojson"]
 
-    gpsd --> gpssvc
-    pps --> gpssvc
+    dashboard["Dashboard.js"]
+
+    gpsinit --> gpssvc
     gpssvc --> gpsjson
 
     espwd --> wificap
     gpsjson --> wificap
     wificap --> capjson
 
-    capjson --> trilat
-    trilat --> triljson
+    capjson --> dbwriter
+    dbwriter --> ingestdb
 
-    triljson --> apwriter
-    apwriter --> db
+    ingestdb --> batch
+
+    batch --> apdb
+    batch --> geojson
+
+    capjson --> dashboard
+    apdb --> dashboard
 ```
