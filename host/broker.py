@@ -6,14 +6,14 @@ import time
 import yaml
 from collections import defaultdict, deque
 
-BASE = "/media/sbejarano/Developer1/wifi_promiscuous"
+BASE = "/home/sbejarano/wifi_promiscuous"
 INP  = "/dev/shm/wifi_capture.json"
 
 OUT  = f"{BASE}/tmp/wifi_devices.json"
 DENY = f"{BASE}/host/denied_ssid.yaml"
 
-STALE_SEC = 3.0
-WINDOW_SEC = 2.0
+STALE_SEC  = 10.0
+WINDOW_SEC = 10.0
 
 def atomic_write_json(path, obj):
     tmp = path + ".tmp"
@@ -74,10 +74,8 @@ def main():
                 except Exception:
                     continue
 
-        # prune old samples + build live view
         devices = []
         for bssid, dq in list(hist.items()):
-            # prune by window
             while dq and (now - dq[0][0]) > WINDOW_SEC:
                 dq.popleft()
 
@@ -85,21 +83,18 @@ def main():
                 hist.pop(bssid, None)
                 continue
 
-            last_ts, _, _, _, _ = dq[-1]
+            last_ts = dq[-1][0]
             if (now - last_ts) > STALE_SEC:
                 hist.pop(bssid, None)
                 continue
 
-            # pick latest ssid / channel
             ssid = dq[-1][4]
-            ch = dq[-1][3]
+            ch   = dq[-1][3]
 
-            # compute smoothed rssi (simple mean)
             rssi_vals = [x[2] for x in dq if isinstance(x[2], int)]
-            rssi = int(sum(rssi_vals) / max(len(rssi_vals), 1)) if rssi_vals else None
+            rssi = int(sum(rssi_vals) / len(rssi_vals)) if rssi_vals else None
 
-            # side decision based on latest LEFT/RIGHT samples in window
-            left = [x[2] for x in dq if x[1] == "LEFT"]
+            left  = [x[2] for x in dq if x[1] == "LEFT"]
             right = [x[2] for x in dq if x[1] == "RIGHT"]
 
             if left and right:
@@ -125,3 +120,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
