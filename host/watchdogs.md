@@ -31,34 +31,23 @@ flowchart LR
 ```mermaid
 flowchart LR
 
-    CFG[devices.yaml\nScanner Configuration] --> LP[load_ports]
+    DEVICES["devices.yaml"] --> CAPTURE["wifi_capture_service.py"]
 
-    GPS[tmp/gps.json\nGPS Metadata] --> RG[read_gps]
+    GPS["gps.json"] --> CAPTURE
 
-    LP --> T1[capture_thread LEFT]
-    LP --> T2[capture_thread RIGHT]
-    LP --> TN[capture_thread Additional Scanners]
+    LEFT["LEFT Scanner"] --> CAPTURE
+    RIGHT["RIGHT Scanner"] --> CAPTURE
+    OTHER["Other Scanners"] --> CAPTURE
 
-    S1[Serial Port JSON] --> T1
-    S2[Serial Port JSON] --> T2
-    SN[Serial Port JSON] --> TN
+    CAPTURE --> CAPTURE_JSON["wifi_capture.json"]
 
-    T1 --> BUS[CaptureBus]
-    T2 --> BUS
-    TN --> BUS
+    CAPTURE_JSON --> BROKER["broker.py"]
 
-    BUS --> SNAP[snapshot]
+    DENY["denied_ssid.yaml"] --> BROKER
 
-    RG --> GPSBLK[build_gps_block]
+    BROKER --> DEVICES_JSON["wifi_devices.json"]
 
-    SNAP --> PAYLOAD[Build Payload]
-    GPSBLK --> PAYLOAD
-
-    PAYLOAD --> WRITE[atomic_write_json]
-
-    WRITE --> OUT[/dev/shm/wifi_capture.json]
-
-    OUT -. consumed by .-> BROKER[broker.py]
+    DEVICES_JSON --> UI["Dashboard / API / UI"]
 ```
 
 ---
