@@ -1,0 +1,2 @@
+sbejarano@sbejarano-XPS-15-9570:~/wifi_promiscuous/tmp$ cat power_state.json
+{"wh_used": 640.0, "zero_latched": true, "full_timer": 0.0, "ts_utc": "2026-06-08T23:53:40.001707+00:00"}
