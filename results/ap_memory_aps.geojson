@@ -1,0 +1,31 @@
+{
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.44777061577422,
+          41.82114032250288
+        ]
+      },
+      "properties": {
+        "bssid": "48:F0:7B:16:FF:2A",
+        "ssid": "hidden",
+        "channel": "11",
+        "confidence": 9.999999999999998,
+        "observation_count": 25,
+        "batch_count": 3,
+        "avg_rssi": -87.51565494200206,
+        "strongest_rssi": -73.71428571428571,
+        "weakest_rssi": -93.0,
+        "spread_m": 644.093706567006,
+        "left_count": 0,
+        "right_count": 0,
+        "omni_count": 3,
+        "directional_observation_count": 0,
+        "heading_observation_count": 25,
+        "first_seen": "2026-06-07T17:04:05+00:00",
+        "last_seen": "2026-06-07T17:11:20+00:00",
+        "updated_at": "2026-06-07T18:04:20+00:00",
+        "category": "ap"
+      }
+    }
