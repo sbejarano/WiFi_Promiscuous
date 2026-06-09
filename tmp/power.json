@@ -1,0 +1,2 @@
+sbejarano@sbejarano-XPS-15-9570:~/wifi_promiscuous/tmp$ cat power.json
+{"ts_utc": "2026-06-08T23:53:44.001268+00:00", "battery_v": 0.368, "current_a": 0.001, "power_w": 0.0, "battery_wh_capacity_configured": 640.0, "wh_used_est": 640.0, "remaining_wh_est": 0.0, "soc_pct_coulomb": 0.0, "soc_pct_voltage": 0.0, "runtime_hours_est": 0.0, "runtime_minutes_est": 0, "alarm_low_voltage": true, "zero_latched": true, "battery_full_detected": false, "thresholds": {"warn_v": 11.8, "zero_v": 11.6, "recover_v": 12.2, "full_detect_v": 13.3, "full_detect_time_s": 120}}
