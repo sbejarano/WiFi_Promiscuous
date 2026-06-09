@@ -26,7 +26,42 @@ flowchart LR
     M["Loop every 0.25s"] --> B
     L --> M
 ```
+# wifi_capture_service.py
 
+```mermaid
+flowchart LR
+
+    CFG["devices.yaml<br/>Scanner configuration"] --> LP["load_ports()"]
+
+    GPS["tmp/gps.json<br/>GPS metadata"] --> RG["read_gps()"]
+
+    LP --> T1["capture_thread()<br/>LEFT scanner"]
+    LP --> T2["capture_thread()<br/>RIGHT scanner"]
+    LP --> TN["capture_thread()<br/>Additional scanners"]
+
+    T1 --> BUS["CaptureBus"]
+    T2 --> BUS
+    TN --> BUS
+
+    S1["Serial Port<br/>JSON packets"] --> T1
+    S2["Serial Port<br/>JSON packets"] --> T2
+    SN["Serial Ports<br/>JSON packets"] --> TN
+
+    BUS --> SNAP["snapshot()"]
+
+    RG --> GPSBLK["build_gps_block()"]
+
+    SNAP --> PAYLOAD["payload = {<br/>ts,<br/>gps,<br/>scanner_status,<br/>observations[]<br/>}"]
+
+    GPSBLK --> PAYLOAD
+
+    PAYLOAD --> WRITE["atomic_write_json()"]
+
+    WRITE --> OUT["/dev/shm/wifi_capture.json"]
+
+    OUT -. consumed by .-> BROKER["broker.py"]
+    ```
+    
 # ESP USB Watchdog
 
 ## Purpose
