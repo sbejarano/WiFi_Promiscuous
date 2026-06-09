@@ -54,27 +54,122 @@ flowchart LR
 
 ## How It Works
 
-This process is a collector and aggregator.
+ raw observations into a clean list of active Wi-Fi devices.
+**Ensures ESP32 USB capture nodes stay responsive by detecting stalled data streams, safely resetting only the affected USB devices, and exposing status for dashboards.**
+# WiFi Capture Service
 
-It:
+## Overview
 
-Reads Wi-Fi observations from one or more serial-connected scanners.
-Reads GPS metadata from gps.json.
-Combines everything into a single snapshot.
-Writes the snapshot to wifi_capture.json every 200 ms.
+`wifi_capture_service.py` is the raw data ingestion layer of the WiFi monitoring system.
 
-It does not perform filtering, deduplication, averaging, or direction calculations. That's what broker.py does later.
+Its responsibility is to:
 
-Startup
-1. Load scanner configuration
-ports = load_ports()
+1. Read WiFi observations from one or more serial-connected scanner devices.
+2. Read GPS metadata from the GPS service.
+3. Combine scanner observations and GPS information into a single shared snapshot.
+4. Continuously write that snapshot to `wifi_capture.json`.
 
-Reads:
+The service performs **no filtering, averaging, deduplication, or device tracking**. Those tasks are handled later by `broker.py`.
 
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+
+    DEVICES["devices.yaml"] --> CAPTURE["wifi_capture_service.py"]
+
+    GPS["gps.json"] --> CAPTURE
+
+    LEFT["LEFT Scanner"] --> CAPTURE
+    RIGHT["RIGHT Scanner"] --> CAPTURE
+    OTHER["Additional Scanners"] --> CAPTURE
+
+    CAPTURE --> CAPTURE_JSON["wifi_capture.json"]
+
+    CAPTURE_JSON --> BROKER["broker.py"]
+
+    DENY["denied_ssid.yaml"] --> BROKER
+
+    BROKER --> DEVICES_JSON["wifi_devices.json"]
+
+    DEVICES_JSON --> UI["Dashboard / API / UI"]
+```
+
+---
+
+## Inputs
+
+### Scanner Configuration
+
+The service reads scanner configuration from:
+
+```text
 devices.yaml
+```
 
-and builds a list like:
+This file defines:
 
+* Scanner node names
+* Serial device paths
+* Baud rates
+
+Example:
+
+```yaml
+ports:
+  LEFT: /dev/ttyUSB0
+  RIGHT: /dev/ttyUSB1
+```
+
+---
+
+### GPS Metadata
+
+The service reads GPS information from:
+
+```text
+tmp/gps.json
+```
+
+GPS data is treated as metadata only.
+
+WiFi capture continues even when:
+
+* GPS is unavailable
+* GPS has no fix
+* GPS service is restarting
+* `gps.json` is missing
+
+---
+
+### Scanner Data
+
+Each scanner continuously sends JSON packets over a serial connection.
+
+Example:
+
+```json
+{
+  "bssid": "AA:BB:CC:DD:EE:FF",
+  "ssid": "CoffeeShop",
+  "rssi": -61,
+  "channel": 6
+}
+```
+
+---
+
+## Startup Sequence
+
+### 1. Load Scanner Configuration
+
+At startup the service reads `devices.yaml` and creates a list of scanner definitions.
+
+Example:
+
+```python
 [
     {
         "node": "LEFT",
@@ -87,136 +182,123 @@ and builds a list like:
         "baud": 115200
     }
 ]
+```
 
-These become scanner threads.
+---
 
-2. Create shared bus
+### 2. Create Capture Bus
+
+The service creates a shared in-memory bus:
+
+```python
 bus = CaptureBus()
+```
 
 The bus contains:
 
-self.buf
+* A rolling observation buffer
+* Scanner status information
+* Thread synchronization locks
 
-A rolling observation buffer:
+Observations are stored in:
 
+```python
 deque(maxlen=2000)
+```
 
-and
+When the buffer reaches capacity, the oldest observations are automatically discarded.
 
-self.status
+---
 
-Scanner health information.
+### 3. Start Scanner Threads
 
-3. Launch one thread per scanner
-threading.Thread(
-    target=capture_thread,
-    ...
-).start()
+One thread is created for each configured scanner.
 
 Example:
 
-LEFT  -> thread
-RIGHT -> thread
+```text
+LEFT Scanner  -> Thread
+RIGHT Scanner -> Thread
+```
 
-Each thread operates independently.
+Each scanner thread operates independently.
 
-Scanner Thread Operation
+---
 
-Each scanner thread continuously tries to connect:
+## Scanner Thread Operation
 
-ser = serial.Serial(dev, baud)
+Each thread continuously attempts to open its assigned serial port.
 
-If the scanner disappears:
+Example:
 
-USB unplugged
-ESP32 reboot
-Serial timeout
+```python
+serial.Serial(dev, baud)
+```
 
-the thread marks itself disconnected and retries.
+If a scanner disconnects or restarts, the thread:
 
-Reading Scanner Data
+1. Marks the scanner as disconnected.
+2. Records the error.
+3. Waits briefly.
+4. Attempts to reconnect.
 
-Each scanner sends JSON lines such as:
+This allows the service to recover automatically from hardware failures.
 
+---
+
+## Packet Processing
+
+Each scanner thread reads JSON packets line-by-line.
+
+Example packet:
+
+```json
 {
-  "bssid":"AA:BB:CC:DD:EE:FF",
-  "ssid":"Starbucks",
-  "rssi":-61,
-  "channel":6
+  "bssid": "AA:BB:CC:DD:EE:FF",
+  "ssid": "CoffeeShop",
+  "rssi": -61,
+  "channel": 6
 }
+```
 
-The thread reads:
+The service validates:
 
-raw = ser.readline()
+* BSSID exists
+* RSSI exists
 
-then:
+Packets missing required fields are ignored.
 
-pkt = json.loads(raw)
-Validation
+---
 
-The packet is discarded unless:
+## Observation Creation
 
-bssid exists
-
-and
-
-rssi exists
-
-This prevents junk packets from entering the system.
-
-Observation Creation
-
-A normalized observation is created:
-
-obs = {
-    "ts": time.time(),
-    "node": node,
-    "bssid": bssid,
-    "ssid": ssid,
-    "rssi": rssi,
-    "channel": channel,
-    "frequency": freq
-}
+Valid packets are normalized into observations.
 
 Example:
 
+```json
 {
   "ts": 1717966000.5,
   "node": "LEFT",
   "bssid": "AA:BB:CC:DD:EE:FF",
-  "ssid": "Starbucks",
+  "ssid": "CoffeeShop",
   "rssi": -61,
   "channel": 6,
   "frequency": 2437
 }
-Add to CaptureBus
+```
 
-The observation gets stored:
+The observation is then stored in the shared CaptureBus.
 
-bus.add(obs)
+---
 
-inside:
+## Scanner Status Tracking
 
-deque(maxlen=2000)
-
-This acts as a rolling buffer.
-
-When full:
-
-new observation arrives
-↓
-oldest observation removed
-
-automatically.
-
-Scanner Status Tracking
-
-Each thread updates:
-
-bus.set_status(...)
+Each scanner periodically updates its status.
 
 Example:
 
+```json
 {
   "LEFT": {
     "port": "/dev/ttyUSB0",
@@ -225,150 +307,171 @@ Example:
     "last_seen": 1717966000
   }
 }
+```
 
-This lets the UI know whether scanners are alive.
+This information allows downstream services and dashboards to determine scanner health.
 
-Main Loop
+---
 
-After startup, the main thread runs forever:
+## Main Processing Loop
 
-while True:
+The main thread runs continuously.
 
-Every:
+Every 200 milliseconds it performs the following steps:
 
-FLUSH_MS = 200
+### Read GPS Data
 
-milliseconds.
-
-Read GPS
+```python
 gps = read_gps()
+```
 
-Reads:
+The service attempts to read the latest GPS information.
 
-tmp/gps.json
+If GPS is unavailable, a default GPS block is generated.
 
-produced by your GPS service.
+---
 
-If GPS is unavailable:
+### Build GPS Block
 
-None
+GPS data is normalized into a consistent structure.
 
-is returned.
+Even when GPS is unavailable, fields remain present:
 
-The capture service continues operating normally.
-
-Build GPS Block
-build_gps_block(gps)
-
-Normalizes GPS information.
-
-Even when GPS is missing, it generates:
-
+```json
 {
   "gps_valid": false,
   "gps_fix": "NO GPS DATA"
 }
+```
 
-so downstream consumers always see the same schema.
+This guarantees a stable schema for downstream consumers.
 
-Snapshot the Bus
+---
+
+### Capture Snapshot
+
+The service captures a thread-safe snapshot of:
+
+* Current observations
+* Scanner status
+
+```python
 observations, scanner_status = bus.snapshot()
+```
 
-This grabs:
+---
 
-list(self.buf)
-dict(self.status)
+### Build Payload
 
-under a lock.
+The output payload combines:
 
-Result:
+* Timestamp
+* GPS metadata
+* Scanner status
+* WiFi observations
 
-observations
+Example:
 
-contains recent Wi-Fi packets.
+```json
+{
+  "ts": 1717966000.5,
+  "gps": {},
+  "scanner_status": {},
+  "observations": []
+}
+```
 
-and
+---
 
-scanner_status
+### Write Output
 
-contains scanner health.
+The payload is written to:
 
-Build Output Payload
+```text
+/dev/shm/wifi_capture.json
+```
 
-The final object looks like:
+using an atomic write operation.
 
+Process:
+
+```text
+wifi_capture.json.tmp
+        ↓
+os.replace()
+        ↓
+wifi_capture.json
+```
+
+This guarantees readers never encounter:
+
+* Partial writes
+* Truncated files
+* Invalid JSON
+
+---
+
+## Output Format
+
+The generated file contains:
+
+```json
 {
   "ts": 1717966000.5,
 
   "gps": {
-    ...
+    "...": "..."
   },
 
   "scanner_status": {
-    ...
+    "...": "..."
   },
 
   "observations": [
-    ...
-  ]
-}
-Write Output File
-atomic_write_json(
-    "/dev/shm/wifi_capture.json",
-    payload
-)
-
-creates:
-
-wifi_capture.json.tmp
-
-then:
-
-os.replace(...)
-
-atomically swaps it into place.
-
-This guarantees readers never see:
-
-partial JSON
-truncated files
-corrupt writes
-What broker.py receives
-
-Every ~200 ms, broker.py sees:
-
-{
-  "ts": ...,
-
-  "gps": {...},
-
-  "scanner_status": {...},
-
-  "observations": [
     {
-      "node":"LEFT",
-      "bssid":"AA:BB:CC",
-      "rssi":-62
-    },
-    {
-      "node":"RIGHT",
-      "bssid":"AA:BB:CC",
-      "rssi":-70
+      "node": "LEFT",
+      "bssid": "AA:BB:CC:DD:EE:FF",
+      "ssid": "CoffeeShop",
+      "rssi": -61,
+      "channel": 6
     }
   ]
 }
+```
 
-broker.py then:
+---
 
-Reads observations.
-Groups by BSSID.
-Maintains a 10-second history.
-Computes average RSSI.
-Computes LEFT vs RIGHT side.
-Filters hidden and denied SSIDs.
-Produces wifi_devices.json.
+## Relationship to broker.py
 
-So in one sentence:
+`wifi_capture_service.py` produces raw observations.
 
-wifi_capture_service.py is the raw data ingestion layer that merges scanner feeds and GPS metadata into a single shared capture file, while broker.py is the analytics layer that converts those raw observations into a clean list of active Wi-Fi devices.
-**Ensures ESP32 USB capture nodes stay responsive by detecting stalled data streams, safely resetting only the affected USB devices, and exposing status for dashboards.**
+`broker.py` consumes those observations and performs higher-level processing:
+
+* Hidden SSID filtering
+* Deny-list filtering
+* Device tracking
+* RSSI averaging
+* Direction determination (LEFT vs RIGHT)
+* Active device aging
+
+Pipeline:
+
+```text
+Scanners + GPS
+        ↓
+wifi_capture_service.py
+        ↓
+wifi_capture.json
+        ↓
+broker.py
+        ↓
+wifi_devices.json
+        ↓
+Dashboard / API
+```
+
+---
+
+## Summary
+
+`wifi_capture_service.py` serves as the system's ingestion layer. It merges scanner feeds and GPS metadata into a single, continuously updated capture file. The service is intentionally simple, resilient, and stateless, allowing downstream components such as `broker.py` to perform filtering, analytics, and device tracking.
