@@ -1,3 +1,32 @@
+# broker.py
+```mermaid
+
+flowchart LR
+    A["/dev/shm/wifi_capture.json<br/>Input: observations[]"] --> B["broker.py<br/>read_capture()"]
+
+    D["denied_ssid.yaml<br/>Input: deny list"] --> C["load_denied()"]
+    C --> E["Filter observations"]
+
+    B --> E
+
+    E -->|drop if missing bssid/rssi| X1["Ignored"]
+    E -->|drop hidden SSID| X2["Ignored"]
+    E -->|drop denied SSID| X3["Ignored"]
+
+    E --> F["hist[bssid]<br/>rolling deque"]
+    F --> G["Prune entries older than<br/>WINDOW_SEC = 10s"]
+    G --> H["Drop stale BSSID if<br/>last_seen older than STALE_SEC = 10s"]
+
+    H --> I["Compute device fields:<br/>ssid, channel, avg rssi,<br/>side, last_seen"]
+    I --> J["devices[]"]
+
+    J --> K["atomic_write_json()"]
+    K --> L["wifi_devices.json<br/>Output: { ts, devices }"]
+
+    M["Loop every 0.25s"] --> B
+    L --> M
+```
+
 # ESP USB Watchdog
 
 ## Purpose
