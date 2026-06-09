@@ -1,0 +1,46 @@
+sbejarano@sbejarano-XPS-15-9570:~/wifi_promiscuous/data$ sqlite3 trilateration_data_latest.db
+SQLite version 3.45.1 2024-01-30 16:01:20
+Enter ".help" for usage hints.
+sqlite> .schema
+CREATE TABLE wifi_captures (
+  id INTEGER PRIMARY KEY,
+  ts_utc TEXT NOT NULL,
+  bssid TEXT NOT NULL,
+  ssid TEXT,
+  sample_count INTEGER,
+  median_rssi INTEGER,
+  avg_rssi REAL,
+  dominant_channel INTEGER,
+  frequency_mhz INTEGER,
+  est_lat REAL,
+  est_lon REAL,
+  est_alt REAL,
+  accuracy_m REAL,
+  left_rssi INTEGER,
+  right_rssi INTEGER,
+  differential INTEGER,
+  side TEXT,
+  side_confidence REAL,
+  gps_lat_min REAL,
+  gps_lat_max REAL,
+  gps_lon_min REAL,
+  gps_lon_max REAL,
+  last_seen_ts TEXT,
+  gps_ts_utc TEXT,
+  gps_track_deg REAL,
+  gps_speed_mps REAL,
+  gps_heading_deg REAL,
+  gps_heading_valid INTEGER,
+  gps_speed_knots REAL,
+  gps_stationary INTEGER,
+  gps_valid INTEGER,
+  gps_pdop REAL,
+  gps_hdop REAL,
+  gps_vdop REAL,
+  gps_monotonic_ts REAL
+);
+CREATE INDEX idx_wificap_bssid ON wifi_captures(bssid);
+CREATE INDEX idx_wificap_ts ON wifi_captures(ts_utc);
+CREATE INDEX idx_wificap_gps_ts ON wifi_captures(gps_ts_utc);
+CREATE INDEX idx_wificap_channel ON wifi_captures(dominant_channel);
+CREATE INDEX idx_wificap_side ON wifi_captures(side);
