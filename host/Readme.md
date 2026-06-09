@@ -1,318 +1,386 @@
-# Caveats and Problems
+# System Architecture
 
-This document captures the **actual failure modes**, root causes, and the configuration decisions that resolved them. It is written as a post‑mortem and reference so the same issues are not reintroduced later.
+## Overview
 
----
+The system is composed of two independent subsystems:
 
-## What Was Actually Going Wrong (Root Causes)
+1. GNSS acquisition and distribution
+2. Wi-Fi observation and analytics
 
-There were **three independent mechanisms** fighting each other on the same UART GNSS device, plus one internal receiver state issue.
+GNSS data is collected by an ESP32 GPS bridge and normalized by `gps_service.py`.
 
----
+Wi-Fi observations are collected from multiple ESP32 scanners and processed through a multi-stage pipeline.
 
-### 1. gpsd Socket Activation + UART GNSS = Deadlock
-
-* `gpsd.socket` was enabled
-* systemd started `gpsd` **on demand** via socket activation
-* gpsd waited for "valid enough" data before signaling **READY**
-* Because of **PPS + no fix (mode=1) + continuous UART streaming**, gpsd never reached READY
-* systemd waited → **timeout** → retry → loop
-
-This is a **known gpsd failure mode** on embedded UART GNSS systems.
-
-> Cold boot appeared to work only due to **race timing**, not because the configuration was correct.
+Services communicate through JSON state files, allowing components to restart independently and simplifying debugging.
 
 ---
 
-### 2. Forking Service Type Was Wrong
-
-* Default gpsd runs as `Type=forking`
-* systemd expects a fork + parent exit
-* gpsd stayed attached to the UART and PPS
-* systemd believed startup never completed
-
-Result:
-
-* gpsd was **running**
-* systemd treated it as **still starting** (`activating` forever)
-
----
-
-### 3. Mixing Data Mode and Control Mode on One UART
-
-* GNSS was streaming NMEA continuously
-* Multiple tools touched `/dev/serial0`:
-
-  * gpsd
-  * gpspipe
-  * minicom
-  * manual AT commands
-
-AT commands were:
-
-* ignored
-* interleaved with NMEA
-* or blocked by file descriptor ownership
-
-> The GNSS was **not locked** — it was simply **busy and streaming**.
-
----
-
-### 4. GNSS Internal State Got Wedged
-
-* Receiver accepted a **UBX reset**
-* That reset **disabled NMEA output**
-* gpsd then waited forever for data that never arrived
-* Manual NMEA re‑enable fixed it
-
-This explains why:
-
-* cold reboot "fixed" the problem
-* warm restarts did not
-
----
-
-## Why the Final Configuration Works
-
-Four critical corrections were made.
-
----
-
-### 1. Socket Activation Disabled
-
-* gpsd now starts **only when explicitly requested**
-* no race condition
-* no socket deadlock
-
----
-
-### 2. Forced `Type=simple`
-
-* systemd tracks the **real gpsd process**
-* no phantom "activating" state
-* no startup timeout
-
----
-
-### 3. Hard‑Coded Devices
-
-* no USB probing
-* no tty discovery
-* no waiting on nonexistent hardware
-* **deterministic startup every time**
-
----
-
-### 4. Stabilized GNSS Output
-
-* NMEA explicitly re‑enabled
-* configuration saved to GNSS flash
-* no silent state after reset
-
----
-
-## Fixed ESP32 Device Naming (No Discovery)
-
-### Current Device Map
-
-```text
-ls -l /dev/esp-*
-
-/dev/esp-left   -> ttyACM10
-/dev/esp-right  -> ttyACM0
-/dev/esp-node1  -> ttyACM6
-/dev/esp-node2  -> ttyACM13
-/dev/esp-node3  -> ttyACM11
-/dev/esp-node4  -> ttyACM7
-/dev/esp-node5  -> ttyACM3
-/dev/esp-node6  -> ttyACM12
-/dev/esp-node7  -> ttyACM8
-/dev/esp-node8  -> ttyACM4
-/dev/esp-node9  -> ttyACM1
-/dev/esp-node10 -> ttyACM9
-/dev/esp-node11 -> ttyACM5
-/dev/esp-node12 -> ttyACM2
-```
-
----
-
-## udev Rules – Fixed ESP32 USB JTAG / Serial Mapping
-
-**NO DISCOVERY. NO SCANNING. NO ttyACM USAGE.**
-
-```udev
-# ============================================================
-# ESP32 USB JTAG / Serial – FIXED DEVICE NAMES
-# ============================================================
-
-# -------- Directional scanners --------
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="FC:01:2C:CB:BA:14", SYMLINK+="esp-left"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="FC:01:2C:CB:BC:CC", SYMLINK+="esp-right"
-
-# -------- Fixed scanners --------
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:50:A8", SYMLINK+="esp-node1"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:F6:D7:AC", SYMLINK+="esp-node2"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FA:12:2C", SYMLINK+="esp-node3"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:F6:D8:08", SYMLINK+="esp-node4"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:4F:04", SYMLINK+="esp-node5"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:F6:D8:10", SYMLINK+="esp-node6"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:5E:54", SYMLINK+="esp-node7"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:57:74", SYMLINK+="esp-node8"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:50:9C", SYMLINK+="esp-node9"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FA:0C:70", SYMLINK+="esp-node10"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FA:12:1C", SYMLINK+="esp-node11"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", ATTRS{serial}=="B8:F8:62:FB:56:2C", SYMLINK+="esp-node12"
-```
-
----
-
-## Why Satellites Appeared Later (Mode 1 → Mode 2/3)
-
-This behavior is expected and explained by **GNSS acquisition physics and receiver state**, not by Linux or gpsd instability.
-
-### What Happened Internally
-
-1. **Repeated GNSS resets wiped ephemeris/almanac**
-
-   * UBX resets clear satellite knowledge
-   * Receiver becomes effectively blind
-   * NMEA, time, and PPS still function
-   * gpsd reports `mode = 1`
-
-2. **Timing can stabilize before navigation**
-
-   * PPS does *not* require a position fix
-   * Time-only solutions are valid
-   * chrony can lock PPS while gpsd remains in mode 1
-
-3. **Service churn prevented acquisition**
-
-   * gpsd restarts
-   * socket activation loops
-   * UART contention
-   * Each interruption delayed ephemeris download
-
-4. **After stabilization, ephemeris download completed**
-
-   * Continuous power
-   * Continuous UART access
-   * Continuous sky view
-   * Satellites appeared suddenly
-   * gpsd transitioned to mode 2/3
-
-> GNSS requires **uninterrupted time** after a cold start. The final configuration allowed that to happen.
-
----
-
-## Working GPS + PPS Service Flow
-
-> **Note:** This document uses Mermaid diagrams. If your Markdown renderer does not support Mermaid, an ASCII fallback is provided below each diagram.
+## Architecture
 
 ```mermaid
-flowchart TD
-    GNSS["GNSS Receiver"]
+flowchart LR
 
-    UART["/dev/serial0<br/>NMEA"]
-    PPS["/dev/pps0<br/>PPS"]
+    GNSS["GNSS Module"]
 
-    gpsd["gpsd.service<br/>(Type=simple)"]
-    chrony["chronyd"]
+    ESP32["ESP32 GPS Bridge"]
 
-    apps["Consumers<br/>(gpspipe, python)"]
+    GPIO["GPIO18"]
+    PPS["/dev/pps0"]
 
-    GNSS --> UART --> gpsd --> apps
-    GNSS --> PPS --> chrony
-    gpsd --> chrony
+    GPSSVC["gps_service.py"]
+    GPSJSON["gps.json"]
+
+    SCANNERS["ESP32 Wi-Fi Scanners"]
+
+    CAPTURE["wifi_capture_service.py"]
+    RAW["wifi_capture.json"]
+
+    BROKER["broker.py"]
+    DEVICES["wifi_devices.json"]
+
+    UI["Dashboard / API"]
+
+    GNSS -->|UART| ESP32
+    ESP32 -->|USB Serial JSON| GPSSVC
+
+    GNSS -->|PPS| GPIO
+    GPIO --> PPS
+    PPS --> GPSSVC
+
+    GPSSVC --> GPSJSON
+
+    SCANNERS --> CAPTURE
+    GPSJSON --> CAPTURE
+
+    CAPTURE --> RAW
+
+    RAW --> BROKER
+
+    BROKER --> DEVICES
+
+    DEVICES --> UI
 ```
 
-**Key properties:**
+---
 
-* Single owner of UART (gpsd)
-* PPS isolated from NMEA traffic
-* No socket activation
-* Deterministic startup
+# GNSS Subsystem
+
+## GNSS Module
+
+The GNSS module provides:
+
+- Latitude and longitude
+- Altitude
+- Speed
+- Heading
+- Satellite information
+- PPS timing pulses
+
+The GNSS module exposes two independent outputs:
+
+### Navigation Data
+
+Navigation data is sent to the ESP32 GPS bridge over UART.
+
+The ESP32 converts the GNSS stream into JSON and delivers it to the Raspberry Pi over USB serial.
+
+### PPS Timing
+
+The PPS signal is wired directly from the GNSS module to Raspberry Pi GPIO18.
+
+Linux exposes this timing source as:
+
+```text
+/dev/pps0
+```
+
+This path is completely independent of the ESP32 GPS bridge.
 
 ---
 
-## devices.yaml and udev Integration
+## ESP32 GPS Bridge
 
-### Purpose of `devices.yaml`
+The ESP32 acts as a transport layer between the GNSS module and the Raspberry Pi.
 
-`devices.yaml` provides a **logical identity layer** for ESP32 Wi-Fi scanners:
+Responsibilities:
 
-* Maps physical devices to semantic roles
-* Decouples software logic from kernel-assigned names
-* Enables stable node identity across reboots
+- Receive GNSS navigation data
+- Format navigation information as JSON
+- Deliver data over USB serial
 
-Example concepts:
+The Raspberry Pi accesses the bridge through a fixed device path:
 
-* Fixed scanners: `node1` … `node12`
-* Directional scanners: `LEFT`, `RIGHT`
+```text
+/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+```
+
+Using `/dev/serial/by-id` eliminates dependence on changing `ttyUSB*` assignments.
 
 ---
 
-### Role of udev Serial Rules
+## gps_service.py
 
-udev rules convert **USB serial numbers** into **stable device paths**:
+`gps_service.py` is responsible for GPS acquisition and normalization.
 
-* `/dev/esp-node1`
-* `/dev/esp-left`
-* `/dev/esp-right`
+Responsibilities:
+
+- Read JSON navigation data from the ESP32 GPS bridge
+- Read PPS timing information from `/dev/pps0`
+- Normalize GPS state
+- Publish GPS information for the rest of the system
+
+Output:
+
+```text
+tmp/gps.json
+```
+
+The file is written atomically so readers never encounter partial updates.
+
+---
+
+## gps.json
+
+`gps.json` is the system-wide GPS state file.
+
+Typical contents include:
+
+```json
+{
+  "gps_valid": true,
+  "lat": 40.1234,
+  "lon": -74.1234,
+  "speed_mps": 12.5,
+  "heading_deg": 182.3,
+  "sats": 18,
+  "pps_ok": true
+}
+```
+
+Consumers never communicate directly with GNSS hardware.
+
+Instead, they read the current GPS state from `gps.json`.
+
+---
+
+# Wi-Fi Subsystem
+
+## ESP32 Wi-Fi Scanners
+
+The system uses multiple ESP32-based Wi-Fi scanners.
+
+Examples:
+
+- LEFT
+- RIGHT
+- node1
+- node2
+- ...
+- node12
+
+Each scanner continuously reports observations such as:
+
+```json
+{
+  "bssid": "AA:BB:CC:DD:EE:FF",
+  "ssid": "CoffeeShop",
+  "rssi": -61,
+  "channel": 6
+}
+```
+
+---
+
+## wifi_capture_service.py
+
+`wifi_capture_service.py` is the ingestion layer for Wi-Fi observations.
+
+Responsibilities:
+
+- Read serial data from ESP32 scanners
+- Track scanner status
+- Read GPS metadata from `gps.json`
+- Aggregate observations into a single state file
+
+Output:
+
+```text
+/dev/shm/wifi_capture.json
+```
+
+The output contains:
+
+- GPS metadata
+- Scanner health information
+- Raw Wi-Fi observations
+
+---
+
+## wifi_capture.json
+
+Example structure:
+
+```json
+{
+  "ts": 1717966000.5,
+
+  "gps": {},
+
+  "scanner_status": {},
+
+  "observations": []
+}
+```
+
+This file represents the complete system snapshot at a point in time.
+
+---
+
+## broker.py
+
+`broker.py` consumes:
+
+```text
+/dev/shm/wifi_capture.json
+```
+
+Responsibilities:
+
+- Track active devices
+- Maintain observation history
+- Compute average RSSI
+- Determine LEFT vs RIGHT directionality
+- Filter hidden SSIDs
+- Apply deny lists
+- Remove stale observations
+
+Output:
+
+```text
+tmp/wifi_devices.json
+```
+
+---
+
+## wifi_devices.json
+
+Example:
+
+```json
+{
+  "ts": 1717966000.5,
+  "devices": [
+    {
+      "bssid": "AA:BB:CC:DD:EE:FF",
+      "ssid": "CoffeeShop",
+      "rssi": -61,
+      "channel": 6,
+      "side": "LEFT"
+    }
+  ]
+}
+```
+
+This file represents the processed device view used by dashboards and APIs.
+
+---
+
+# Device Identity Management
+
+## udev Rules
+
+All ESP32 devices use fixed names derived from USB serial numbers.
+
+Examples:
+
+```text
+/dev/esp-left
+/dev/esp-right
+
+/dev/esp-node1
+/dev/esp-node2
+...
+/dev/esp-node12
+```
 
 This eliminates:
 
-* ttyACM enumeration variance
-* discovery logic
-* race conditions at boot
+- ttyACM enumeration changes
+- device discovery logic
+- startup race conditions
 
 ---
 
-### Combined Architecture Impact
+## devices.yaml
 
-```mermaid
-flowchart TD
-    USB[ESP32 USB Devices]
-    udev[udev Rules
-(serial → name)]
-    devs[/dev/esp-*]
-    yaml[devices.yaml
-logical mapping]
-    broker[broker.py]
+`devices.yaml` maps logical roles to physical devices.
 
-    USB --> udev --> devs --> broker
-    yaml --> broker
+Example:
+
+```yaml
+ports:
+  LEFT: /dev/esp-left
+  RIGHT: /dev/esp-right
 ```
 
-**ASCII fallback:**
+or
 
-```
-ESP32 USB Devices
-        |
-      udev
- (serial → name)
-        |
-    /dev/esp-*
-        |
-   broker.py <--- devices.yaml
+```yaml
+ports:
+  node1: /dev/esp-node1
+  node2: /dev/esp-node2
 ```
 
-**Result:**
-
-* No scanning
-* No probing
-* No ambiguity
-* Appliance-grade determinism
+Applications operate on logical node names rather than kernel-assigned device identifiers.
 
 ---
 
-## Final Rule (Do Not Break This)
+# Design Principles
 
-> **Never mix GNSS data streaming and control commands on the same UART at the same time.**
+## Single Ownership
 
-If control commands are required:
+Each hardware interface has one owner.
 
-1. Stop gpsd
-2. Send commands
-3. Restart gpsd
+| Resource | Owner |
+|-----------|---------|
+| GNSS Navigation Data | gps_service.py |
+| PPS Timing | gps_service.py |
+| Wi-Fi Scanner Data | wifi_capture_service.py |
+| Device Analytics | broker.py |
 
-This is not a workaround — it is correct design.
+This prevents resource contention and simplifies debugging.
+
+---
+
+## File-Based Interfaces
+
+Services communicate through JSON state files.
+
+Files used throughout the system:
+
+```text
+tmp/gps.json
+/dev/shm/wifi_capture.json
+tmp/wifi_devices.json
+```
+
+Benefits:
+
+- Easy inspection
+- Independent service restarts
+- Clear boundaries between components
+- Simple operational model
+
+---
+
+## Deterministic Device Naming
+
+Hardware devices use fixed identifiers generated by udev.
+
+Benefits:
+
+- No probing
+- No scanning
+- No discovery logic
+- Predictable startup behavior
+- Appliance-grade reliability
