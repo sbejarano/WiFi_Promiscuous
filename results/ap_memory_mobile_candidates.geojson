@@ -1,0 +1,31 @@
+{
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.4779017956587,
+          41.77211466724775
+        ]
+      },
+      "properties": {
+        "bssid": "00:54:AF:AE:63:D6",
+        "ssid": "Hotspot63D6",
+        "channel": "6",
+        "confidence": 10.0,
+        "observation_count": 9,
+        "batch_count": 1,
+        "avg_rssi": -88.70370370370371,
+        "strongest_rssi": -86.0,
+        "weakest_rssi": -93.0,
+        "spread_m": 1809.3702661256514,
+        "left_count": 0,
+        "right_count": 0,
+        "omni_count": 1,
+        "directional_observation_count": 0,
+        "heading_observation_count": 9,
+        "first_seen": "2026-05-25T18:15:07+00:00",
+        "last_seen": "2026-05-25T18:22:41+00:00",
+        "updated_at": "2026-05-26T23:45:55+00:00",
+        "category": "mobile_candidate"
+      }
+    }
