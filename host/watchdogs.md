@@ -31,52 +31,34 @@ flowchart LR
 ```mermaid
 flowchart LR
 
-    CFG["devices.yaml<br/>Scanner configuration"] --> LP["load_ports()"]
+    CFG[devices.yaml\nScanner Configuration] --> LP[load_ports]
 
-    GPS["tmp/gps.json<br/>GPS metadata"] --> RG["read_gps()"]
+    GPS[tmp/gps.json\nGPS Metadata] --> RG[read_gps]
 
-    LP --> T1["capture_thread()<br/>LEFT scanner"]
-    LP --> T2["capture_thread()<br/>RIGHT scanner"]
-    LP --> TN["capture_thread()<br/>Additional scanners"]
+    LP --> T1[capture_thread LEFT]
+    LP --> T2[capture_thread RIGHT]
+    LP --> TN[capture_thread Additional Scanners]
 
-    T1 --> BUS["CaptureBus"]
+    S1[Serial Port JSON] --> T1
+    S2[Serial Port JSON] --> T2
+    SN[Serial Port JSON] --> TN
+
+    T1 --> BUS[CaptureBus]
     T2 --> BUS
     TN --> BUS
 
-    S1["Serial Port<br/>JSON packets"] --> T1
-    S2["Serial Port<br/>JSON packets"] --> T2
-    SN["Serial Ports<br/>JSON packets"] --> TN
+    BUS --> SNAP[snapshot]
 
-    BUS --> SNAP["snapshot()"]
+    RG --> GPSBLK[build_gps_block]
 
-    RG --> GPSBLK["build_gps_block()"]
-
-    SNAP --> PAYLOAD["payload = {<br/>ts,<br/>gps,<br/>scanner_status,<br/>observations[]<br/>}"]
-
+    SNAP --> PAYLOAD[Build Payload]
     GPSBLK --> PAYLOAD
 
-    PAYLOAD --> WRITE["atomic_write_json()"]
+    PAYLOAD --> WRITE[atomic_write_json]
 
-    WRITE --> OUT["/dev/shm/wifi_capture.json"]
+    WRITE --> OUT[/dev/shm/wifi_capture.json]
 
-    OUT -. consumed by .-> BROKER["broker.py"]
-    ```
-    
-# ESP USB Watchdog
-
-## Purpose
-
-A lightweight watchdog daemon that **monitors ESP32 Wi‑Fi capture nodes** and **automatically resets stalled USB devices**.
-
----
-
-## Data Flow
-
-```mermaid
-flowchart TD
-    CAP[wifi_capture.json] --> WD[usb_watchdog.py]
-    WD -->|USB unbind/bind| USB[ESP32 USB Device]
-    WD --> STATE[usb_watchdog.json]
+    OUT -. consumed by .-> BROKER[broker.py]
 ```
 
 ---
