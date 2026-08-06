@@ -54,7 +54,6 @@
 | Inline fuse or polyfuse | 2 | One per hub 5V feed off the X1203 |
 | XH2.54 2-pin connector | Matching fan count | Fan wiring harness |
 | Short USB-C cable | 2 | Hub uplink to Pi (crosses wavewall) |
-| Ethernet cable | 1 | PoE to Pi HAT |
 
 ## Open items — not yet specced
 
