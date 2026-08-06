@@ -59,6 +59,5 @@
 
 - Panel switches (top face, left/right of the SMA array)
 - LEDs (top face, left/right of the SMA array)
-- PoE injector/switch — confirmed to sit outside the enclosure; exact unit and mounting TBD
 - Exact SMA bulkhead + pigtail part numbers
 - Final fastener/screw sizes once panel hardware is chosen
