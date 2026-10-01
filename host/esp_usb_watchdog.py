@@ -7,7 +7,8 @@ import subprocess
 from datetime import datetime
 
 # ================= CONFIG =================
-CAPTURE_FILE = "/var/www/html/wifi/data/wifi_capture.json"
+# Matches the path wifi_capture_service.py writes to (RAM snapshot)
+CAPTURE_FILE = "/dev/shm/wifi_capture.json"
 ESP_GLOB     = "/dev/esp-*"
 
 STALL_SECONDS  = 10
@@ -34,9 +35,11 @@ def log(*msg):
 
 
 def map_node_to_dev(node):
-    # numeric node → /dev/esp-<n>
+    # Case-insensitive match: handles both numeric (esp-1) and named (esp-right, esp-left)
+    node_lower = str(node).lower()
     for dev in glob.glob(ESP_GLOB):
-        if dev.endswith(f"-{node}") or dev.endswith(f"-{node.zfill(2)}"):
+        basename = os.path.basename(dev).lower()
+        if basename == f"esp-{node_lower}" or basename == f"esp-{node_lower.zfill(2)}":
             return dev
     return None
 
@@ -77,11 +80,15 @@ def scan_capture():
     except Exception:
         return
 
-    # Expecting per-node timestamps inside capture
-    for node, info in data.get("nodes", {}).items():
-        ts = info.get("ts")
-        if isinstance(ts, (int, float)):
-            last_seen[str(node)] = float(ts)
+    # wifi_capture_service.py writes {"observations": [{node, ts, ...}, ...]}
+    # Find the most recent timestamp seen per node across all observations.
+    for obs in data.get("observations", []):
+        node = str(obs.get("node", "")).strip()
+        ts = obs.get("ts")
+        if not node or not isinstance(ts, (int, float)):
+            continue
+        if ts > last_seen.get(node, 0):
+            last_seen[node] = float(ts)
 
 
 def write_state():
